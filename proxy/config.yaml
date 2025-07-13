@@ -1,0 +1,16 @@
+external_info:
+  host: "brd.superproxy.io"
+  port: 33335
+  username_base: "brd-customer-hl_cf8753b1-zone-datacenter_proxy1"
+  password: "xuecob6ew790"
+
+filter_domains:
+  - "www.copart.ca"
+  - "copart.ca"
+  - "www.copart.com"
+  - "copart.com"
+  - "cs.copart.com"
+  - "wp.pl"
+  - "www.wp.pl"
+  - "geo.brdtest.com"
+  - "echo.free.beeceptor.com"
