@@ -1,3 +1,4 @@
-#[allow(async_fn_in_trait)]
+#[cfg(feature = "kafka")]
 pub mod kafka;
+#[cfg(feature = "logging")]
 pub mod logging;

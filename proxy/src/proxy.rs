@@ -7,13 +7,13 @@ use hyper::service::service_fn;
 use hyper::upgrade::Upgraded;
 use hyper::{Method, Request, Response};
 use hyper_util::rt::TokioIo;
-use log::{debug, error, info};
 use serde::Deserialize;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tracing::{debug, error, info};
 
 type ServerBuilder = hyper::server::conn::http1::Builder;
 
@@ -218,7 +218,7 @@ impl ProxyChainConfig {
         serde_yaml::from_str(
             &std::fs::read_to_string(&config_path).expect("failed to open proxy chain config file"),
         )
-            .expect("failed to parse proxy chain config file")
+        .expect("failed to parse proxy chain config file")
     }
 }
 
