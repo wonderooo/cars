@@ -127,8 +127,11 @@ impl KafkaSender {
         let status = self.producer.send(queue_msg, Duration::from_secs(0)).await;
         match status {
             Err((e, _)) => error!("failed to send message to kafka queue: {:?}", e),
-            Ok((partition, offset)) => {
-                debug!("sent kafka message to partition `{partition}`, offset `{offset}`")
+            Ok(delivery) => {
+                debug!(
+                    "sent kafka message to partition `{}`, offset `{}`",
+                    delivery.partition, delivery.offset
+                );
             }
         }
     }
