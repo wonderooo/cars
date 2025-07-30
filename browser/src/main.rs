@@ -1,6 +1,6 @@
 use browser::browser::{CopartBrowserCmd, CopartBrowserResponseVariant, Structured};
 use browser::pool::CopartBrowserPool;
-use common::kafka::{run_sender_on, KafkaReceiver, KafkaSender, SyncRxFn};
+use common::kafka::{run_sender_on, KafkaReceiver, KafkaSender};
 use common::logging::setup_logging;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
@@ -14,17 +14,18 @@ async fn main() {
         CopartBrowserPool::<Structured>::run(8, ([127, 0, 0, 1], 8100), cancellation_token.clone())
             .await;
 
-    let rx_done = KafkaReceiver::<CopartBrowserCmd, SyncRxFn>::new(
+    let rx_done = KafkaReceiver::<CopartBrowserCmd>::new(
         "localhost:9092",
         "copart_cmd_lot_search_0",
         &["copart_cmd_lot_search", "copart_cmd_lot_images"],
-        Box::new(move |x| {
-            println!("{:?}", x);
-            cmd_sender.send(x).unwrap()
-        }),
         cancellation_token.clone(),
     )
-    .run();
+    .run(move |x| {
+        let cmd_sender = cmd_sender.clone();
+        async move {
+            cmd_sender.send(x).unwrap();
+        }
+    });
 
     let kafka_sender = KafkaSender::new("localhost:9092");
     let tx_done = run_sender_on(kafka_sender, cancellation_token.clone(), |s| {

@@ -10,7 +10,7 @@ use browser::browser::{
     LotSearchResponse,
 };
 use browser::pool::CopartBrowserPoolResponse;
-use common::kafka::{AsyncRxFn, KafkaReceiver, KafkaSender};
+use common::kafka::{KafkaReceiver, KafkaSender};
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel_async::RunQueryDsl;
 use futures::StreamExt;
@@ -27,21 +27,20 @@ impl CopartPersister {
         info!("running copart persister");
         let sender = Arc::new(KafkaSender::new("localhost:9092"));
         let response_rx_done =
-            KafkaReceiver::<CopartBrowserPoolResponse<CopartBrowserResponse>, AsyncRxFn>::new(
+            KafkaReceiver::<CopartBrowserPoolResponse<CopartBrowserResponse>>::new(
                 "localhost:9092",
                 "copart_response_lot_search_0",
                 &["copart_response_lot_search"],
-                Box::new(move |msg| {
-                    let sender = Arc::clone(&sender);
-                    Box::pin(async move {
-                        if let Err(e) = Self::on_response(msg, sender).await {
-                            error!("error on processing copart browser response: {e}")
-                        }
-                    })
-                }),
                 cancellation_token,
             )
-            .run();
+            .run(move |msg| {
+                let sender = Arc::clone(&sender);
+                async move {
+                    if let Err(e) = Self::on_response(msg, sender).await {
+                        error!("error on processing copart browser response: {e}")
+                    }
+                }
+            });
 
         let persister_done = Arc::new(Notify::new());
         tokio::spawn({

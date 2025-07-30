@@ -5,66 +5,35 @@ use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::{ClientConfig, Message};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::marker::PhantomData;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::field::debug;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
-pub type BoxedAsyncFn<A, R> = Box<dyn Fn(A) -> Pin<Box<dyn Future<Output = R> + Send>> + Send>;
-pub type BoxedFn<A, R> = Box<dyn (Fn(A) -> R) + Send>;
-pub struct AsyncRxFn;
-pub struct SyncRxFn;
+pub trait ReceiveHandle {
+    type RxItem: DeserializeOwned;
 
-pub trait RxFn<A, R> {
-    type Fn;
-
-    fn call(a: A, f: &Self::Fn) -> Pin<Box<dyn Future<Output = R> + Send>>;
+    fn on_message(&self, msg: Self::RxItem) -> impl Future<Output = ()> + Send;
 }
 
-impl<A, R> RxFn<A, R> for AsyncRxFn {
-    type Fn = BoxedAsyncFn<A, R>;
-
-    fn call(a: A, f: &Self::Fn) -> Pin<Box<dyn Future<Output = R> + Send>> {
-        f(a)
-    }
-}
-
-impl<A, R: Send + 'static> RxFn<A, R> for SyncRxFn {
-    type Fn = BoxedFn<A, R>;
-
-    fn call(a: A, f: &Self::Fn) -> Pin<Box<dyn Future<Output = R> + Send>> {
-        let r = f(a);
-        Box::pin(async move { r })
-    }
-}
-
-pub struct KafkaReceiver<R, F>
-where
-    R: DeserializeOwned + 'static,
-    F: RxFn<R, ()>,
-{
+pub struct KafkaReceiver<H> {
     consumer: StreamConsumer,
-    on_rx: F::Fn,
+    receive_handle: H,
     cancellation_token: CancellationToken,
-    phantom: PhantomData<fn(R)>,
 }
 
-impl<R, F> KafkaReceiver<R, F>
+impl<H> KafkaReceiver<H>
 where
-    R: DeserializeOwned,
-    F: RxFn<R, ()>,
+    H: ReceiveHandle + Send + 'static,
 {
     pub fn new(
         bootstrap_server: impl Into<String>,
         consumer_group: impl Into<String>,
         topics: &[&str],
-        on_rx: F::Fn,
+        receive_handle: H,
         cancellation_token: CancellationToken,
     ) -> Self {
         let mut config = ClientConfig::new();
@@ -84,19 +53,14 @@ where
 
         Self {
             consumer,
-            on_rx,
+            receive_handle,
             cancellation_token,
-            phantom: PhantomData,
         }
     }
 
-    pub fn run(self) -> Arc<Notify>
-    where
-        <F as RxFn<R, ()>>::Fn: Send,
-        <F as RxFn<R, ()>>::Fn: 'static,
-    {
+    pub fn run(self) -> Arc<Notify> {
         let join_handle = tokio::spawn(async move {
-            Self::consume(self.consumer, self.on_rx).await;
+            Self::consume(self.consumer, self.receive_handle).await;
         });
 
         let done = Arc::new(Notify::new());
@@ -113,7 +77,7 @@ where
         done
     }
 
-    async fn consume(queue_consumer: StreamConsumer, on_rx: F::Fn) {
+    async fn consume(queue_consumer: StreamConsumer, receive_handle: H) {
         while let Ok(m) = queue_consumer.recv().await {
             let payload = match m.payload_view::<str>() {
                 None => "",
@@ -124,9 +88,9 @@ where
                 }
             };
 
-            let unmarshalled =
-                serde_json::from_str::<R>(payload).expect("Can't deserialize message payload");
-            F::call(unmarshalled, &on_rx).await;
+            let unmarshalled = serde_json::from_str::<H::RxItem>(payload)
+                .expect("Can't deserialize message payload");
+            receive_handle.on_message(unmarshalled).await;
 
             queue_consumer
                 .commit_message(&m, CommitMode::Async)

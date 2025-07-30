@@ -1,44 +1,61 @@
-use crate::copart::response::{CopartRequesterResponse, LotImagesBlobResponse};
-use crate::copart::CopartRequester;
-use browser::browser::{CopartBrowserResponse, CopartBrowserResponseVariant, LotImagesResponse};
-use browser::error::BrowserError;
-use browser::pool::CopartBrowserPoolResponse;
+use crate::copart::client::ICopartRequester;
+use crate::copart::io::{CopartImageBlobCmd, CopartRequesterCmd, CopartRequesterResponse};
 use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
-use tracing::error;
+
+pub type MsgIn = CopartRequesterCmd;
+pub type MsgOut = CopartRequesterResponse;
 
 pub struct ExternalSignaling {
-    pub cmd_sender: UnboundedSender<CopartBrowserPoolResponse<CopartBrowserResponse>>,
-    pub response_receiver: UnboundedReceiver<CopartRequesterResponse>,
+    pub cmd_sender: UnboundedSender<MsgIn>,
+    pub response_receiver: UnboundedReceiver<MsgOut>,
 }
 
-pub struct InternalSignaling {
-    pub cmd_receiver: UnboundedReceiver<CopartBrowserPoolResponse<CopartBrowserResponse>>,
-    pub response_sender: UnboundedSender<CopartRequesterResponse>,
+pub struct CopartRequesterSink<R: ICopartRequester> {
+    cmd_receiver: UnboundedReceiver<MsgIn>,
+    msg_handler: Arc<SingleMsgHandler<R>>,
 }
 
-pub struct CopartRequesterSink {
-    requester: CopartRequester,
-    signaling: InternalSignaling,
+struct SingleMsgHandler<R: ICopartRequester> {
+    requester: R,
+    response_sender: UnboundedSender<MsgOut>,
 }
 
-impl CopartRequesterSink {
-    pub fn new() -> (Self, ExternalSignaling) {
+impl<R: ICopartRequester> SingleMsgHandler<R> {
+    async fn handle_message(&self, msg: MsgIn) {
+        match msg {
+            CopartRequesterCmd::LotImageBlobs { cmds } => self.handle_lot_images(cmds).await,
+        }
+    }
+
+    async fn handle_lot_images(&self, cmds: Vec<CopartImageBlobCmd>) {
+        let images = self.requester.download_images(cmds).await;
+        self.response_sender
+            .send(CopartRequesterResponse::LotImageBlobs { images })
+            .unwrap();
+    }
+}
+
+impl<R> CopartRequesterSink<R>
+where
+    R: ICopartRequester + Send + Sync + 'static,
+{
+    pub fn new(requester: R) -> (Self, ExternalSignaling) {
         let (cmd_sender, cmd_receiver) = tokio::sync::mpsc::unbounded_channel();
         let (response_sender, response_receiver) = tokio::sync::mpsc::unbounded_channel();
         let external_signaling = ExternalSignaling {
             cmd_sender,
             response_receiver,
         };
-        let internal_signaling = InternalSignaling {
-            cmd_receiver,
+        let msg_handler = Arc::new(SingleMsgHandler {
             response_sender,
-        };
+            requester,
+        });
         let sink = Self {
-            requester: CopartRequester::new(),
-            signaling: internal_signaling,
+            msg_handler,
+            cmd_receiver,
         };
         (sink, external_signaling)
     }
@@ -59,28 +76,13 @@ impl CopartRequesterSink {
     }
 
     pub async fn run_blocking(mut self) {
-        while let Some(msg) = self.signaling.cmd_receiver.recv().await {
-            match msg.inner.variant {
-                CopartBrowserResponseVariant::LotImages(result) => {
-                    self.handle_lot_images(result).await;
+        while let Some(msg) = self.cmd_receiver.recv().await {
+            tokio::spawn({
+                let handler = Arc::clone(&self.msg_handler);
+                async move {
+                    handler.handle_message(msg).await;
                 }
-                _ => unreachable!("requester should only receive lot images responses"),
-            }
-        }
-    }
-
-    async fn handle_lot_images(&self, result: Result<LotImagesResponse, BrowserError>) {
-        match result {
-            Ok(lot_images) => {
-                let images = self.requester.download_images(lot_images.response).await;
-                self.signaling
-                    .response_sender
-                    .send(CopartRequesterResponse::LotImagesBlob(
-                        LotImagesBlobResponse { images },
-                    ))
-                    .unwrap();
-            }
-            Err(e) => error!("error on processed copart lot images response: {e}"),
+            });
         }
     }
 }
