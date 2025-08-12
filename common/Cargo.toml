@@ -13,8 +13,10 @@ tracing = { version = "0.1.41", optional = true }
 uuid = { version = "1.17.0", features = ["v4"], optional = true }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"], optional = true }
 tracing-loki = { version = "0.2.6", optional = true }
+async-trait = { version = "0.1.88", optional = true }
+thiserror = { version = "2.0.12", optional = true }
 
 [features]
 default = ["logging"]
 logging = ["tracing-loki", "tracing-subscriber", "tokio"]
-kafka = ["rdkafka", "tokio-util", "serde", "serde_json", "tokio", "tracing", "uuid"]
+kafka = ["rdkafka", "tokio-util", "serde", "serde_json", "tokio", "tracing", "uuid", "async-trait", "thiserror"]
