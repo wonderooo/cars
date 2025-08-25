@@ -6,7 +6,7 @@ members = [
     "persister",
     "proxy",
     "requester",
-    "ticker",
+    "sched",
 ]
 resolver = "3"
 
