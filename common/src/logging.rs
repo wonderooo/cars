@@ -6,7 +6,6 @@ use tracing_subscriber::{EnvFilter, Layer};
 
 pub fn setup_logging(module_name: &str) {
     let others_filter = format!("{module_name}=debug,common=debug");
-    let console_filter = "tokio=trace,runtime=trace";
 
     let stdout_log = tracing_subscriber::fmt::layer()
         .with_writer(std::io::stdout)
@@ -30,13 +29,10 @@ pub fn setup_logging(module_name: &str) {
         .build_url(Url::parse("http://localhost:3100").expect("invalid loki url"))
         .expect("could not build loki");
 
-    // let console = console_subscriber::spawn();
-
     tracing_subscriber::registry()
         .with(stdout_log)
         .with(file_log)
         .with(loki.with_filter(EnvFilter::new(&others_filter)))
-        // .with(console.with_filter(EnvFilter::new(console_filter)))
         .init();
 
     tokio::spawn(loki_task);

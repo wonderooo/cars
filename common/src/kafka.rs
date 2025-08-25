@@ -14,7 +14,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::Notify;
-use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
 use uuid::Uuid;
@@ -125,9 +124,9 @@ impl KafkaReceiver {
     }
 }
 
-pub struct SendMsg<'a, S: Serialize> {
+pub struct SendMsg<S: Serialize> {
     pub msg: S,
-    pub topic: &'a str,
+    pub topic: String,
 }
 
 #[async_trait]
@@ -154,7 +153,7 @@ impl KafkaSender {
 
     pub async fn send<R: Serialize>(&self, msg: &R, topic: &str) -> Result<(), KafkaError> {
         let id = Uuid::new_v4().as_simple().to_string();
-        Ok(self.send_with_key(msg, id, topic).await?)
+        self.send_with_key(msg, id, topic).await
     }
 
     pub async fn send_with_key<R: Serialize>(
@@ -184,7 +183,7 @@ impl KafkaSender {
         H: SendHandle,
     {
         while let Some(send_msg) = send_handle.next().await {
-            if let Err(e) = self.send(&send_msg.msg, send_msg.topic).await {
+            if let Err(e) = self.send(&send_msg.msg, &send_msg.topic).await {
                 error!("kafka message send failed: `{e}`");
             }
         }
@@ -229,25 +228,4 @@ impl From<(String, RDKafkaErrorCode)> for KafkaError {
     fn from((_, code): (String, RDKafkaErrorCode)) -> Self {
         Self::TopicCreate(code)
     }
-}
-
-pub fn run_sender_on(
-    sender: KafkaSender,
-    cancellation_token: CancellationToken,
-    on: impl FnOnce(KafkaSender) -> JoinHandle<()>,
-) -> Arc<Notify> {
-    let join_handle = on(sender);
-
-    let done = Arc::new(Notify::new());
-    tokio::spawn({
-        let done = Arc::clone(&done);
-        async move {
-            cancellation_token.cancelled().await;
-            join_handle.abort_handle().abort();
-            info!("kafka sender closed");
-            done.notify_waiters();
-        }
-    });
-
-    done
 }
