@@ -39,7 +39,7 @@ impl Scheduler {
             let done = Arc::clone(&done);
             async move {
                 cancellation_token.cancelled().await;
-                handles.into_iter().for_each(|handle| handle.abort());
+                handles.iter().for_each(|handle| handle.abort());
                 info!("scheduler closed");
                 done.notify_waiters();
             }
@@ -52,23 +52,27 @@ impl Scheduler {
         futures::future::join_all(self._run_blocking()).await;
     }
 
-    fn _run_blocking(self) -> impl IntoIterator<Item = JoinHandle<()>> {
-        self.tasks.into_iter().map(|task| {
-            tokio::spawn({
-                async move {
-                    let mut interval = tokio::time::interval(task.duration());
-                    loop {
-                        interval.tick().await;
-                        debug!(
-                            "running task with descriptor: `{:?}` and duration: `{:?}s`",
-                            task.descriptor(),
-                            task.duration()
-                        );
-                        task.run().await;
+    fn _run_blocking(self) -> Vec<JoinHandle<()>> {
+        self.tasks
+            .into_iter()
+            .map(|task| {
+                debug!("spawning task interval");
+                tokio::spawn({
+                    async move {
+                        let mut interval = tokio::time::interval(task.duration());
+                        loop {
+                            interval.tick().await;
+                            debug!(
+                                "running task with descriptor: `{:?}` and duration: `{:?}s`",
+                                task.descriptor(),
+                                task.duration()
+                            );
+                            task.run().await;
+                        }
                     }
-                }
+                })
             })
-        })
+            .collect()
     }
 }
 
