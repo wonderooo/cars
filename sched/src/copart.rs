@@ -1,6 +1,6 @@
 use crate::Task;
 use async_trait::async_trait;
-use browser::browser::{CopartBrowserCmd, CopartBrowserCmdVariant};
+use browser::copart::browser::{CopartBrowserCmd, CopartBrowserCmdVariant};
 use common::kafka::KafkaSender;
 use tracing::{debug, error, info};
 use uuid::Uuid;
