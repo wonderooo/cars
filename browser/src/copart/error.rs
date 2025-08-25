@@ -1,4 +1,4 @@
-use crate::browser::CorrelationId;
+use crate::copart::browser::CorrelationId;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

@@ -1,13 +1,12 @@
-use crate::browser::{
-    CmdReceiver, CmdSender, CopartBrowser, CopartBrowserCmd, ResponseGenerator, ResponseReceiver,
-    ResponseSender,
+use crate::copart::browser::{
+    CmdReceiver, CmdSender, CopartBrowser, CopartBrowserCmd, CopartBrowserResponse,
+    ResponseReceiver,
 };
-use crate::error::PoolError;
+use crate::copart::error::PoolError;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -16,34 +15,26 @@ use tokio::task::AbortHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
-pub type PoolResponseReceiver<R> = UnboundedReceiver<CopartBrowserPoolResponse<R>>;
+pub type PoolResponseReceiver = UnboundedReceiver<CopartBrowserPoolResponse>;
+pub type PoolResponseSender = UnboundedSender<CopartBrowserPoolResponse>;
 
-pub struct CopartBrowserPool<RG>
-where
-    RG: ResponseGenerator,
-{
-    phantom: PhantomData<RG>,
-}
+pub struct CopartBrowserPool;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct CopartBrowserPoolResponse<R> {
-    pub inner: R,
+pub struct CopartBrowserPoolResponse {
+    pub inner: CopartBrowserResponse,
     pub ord: usize,
 }
 
-impl<RG> CopartBrowserPool<RG>
-where
-    RG: ResponseGenerator + Sync + 'static,
-    RG::Response: Send + Sync + 'static,
-{
+impl CopartBrowserPool {
     pub async fn run(
         num_workers: usize,
         proxy_addr: impl Into<SocketAddr> + Clone,
         cancellation_token: CancellationToken,
-    ) -> ((CmdSender, PoolResponseReceiver<RG::Response>), Arc<Notify>) {
+    ) -> ((CmdSender, PoolResponseReceiver), Arc<Notify>) {
         let (global_cmd_sender, global_cmd_receiver) = tokio::sync::mpsc::unbounded_channel();
         let (global_response_sender, global_response_receiver) =
-            tokio::sync::mpsc::unbounded_channel::<CopartBrowserPoolResponse<RG::Response>>();
+            tokio::sync::mpsc::unbounded_channel();
         let global_done = Arc::new(Notify::new());
 
         let (cmd_senders, browsers_done, mut aborts) = Self::spawn_browsers(
@@ -65,11 +56,11 @@ where
         num_workers: usize,
         proxy_addr: impl Into<SocketAddr> + Clone,
         cancellation_token: CancellationToken,
-        global_response_sender: ResponseSender<CopartBrowserPoolResponse<RG::Response>>,
+        global_response_sender: PoolResponseSender,
     ) -> (VecDeque<CmdSender>, Vec<Arc<Notify>>, Vec<AbortHandle>) {
         futures::stream::iter(0..num_workers)
             .map(async |idx| {
-                let ((cmd_sender, response_receiver), done) = CopartBrowser::<RG>::run(
+                let ((cmd_sender, response_receiver), done) = CopartBrowser::run(
                     proxy_addr.clone(),
                     CancellationToken::clone(&cancellation_token),
                 )
@@ -89,21 +80,20 @@ where
     }
 
     fn response_receive_handler(
-        global_response_sender: ResponseSender<CopartBrowserPoolResponse<RG::Response>>,
-        mut response_receiver: ResponseReceiver<RG::Response>,
+        global_response_sender: PoolResponseSender,
+        mut response_receiver: ResponseReceiver,
         ord: usize,
     ) -> AbortHandle {
-        let handle_response =
-            |response: RG::Response,
-             global_response_sender: &ResponseSender<CopartBrowserPoolResponse<RG::Response>>,
-             ord: usize|
-             -> Result<(), PoolError> {
-                let pool_response = CopartBrowserPoolResponse {
-                    inner: response,
-                    ord,
-                };
-                Ok(global_response_sender.send(pool_response)?)
+        let handle_response = |response: CopartBrowserResponse,
+                               global_response_sender: &PoolResponseSender,
+                               ord: usize|
+         -> Result<(), PoolError> {
+            let pool_response = CopartBrowserPoolResponse {
+                inner: response,
+                ord,
             };
+            Ok(global_response_sender.send(pool_response)?)
+        };
 
         let join_handle = tokio::spawn(async move {
             while let Some(response) = response_receiver.recv().await {

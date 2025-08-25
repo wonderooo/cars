@@ -1,8 +1,5 @@
-pub mod browser;
-pub mod error;
-pub mod pool;
-pub mod request;
-pub mod response;
+#[allow(clippy::large_enum_variant)]
+pub mod copart;
 
 #[macro_export]
 macro_rules! impl_display_and_debug {

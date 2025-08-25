@@ -1,7 +1,7 @@
-use crate::error::BrowserError;
+use crate::copart::error::BrowserError;
+use crate::copart::request;
+use crate::copart::response::{lot_details, lot_images, lot_search};
 use crate::impl_display_and_debug;
-use crate::request;
-use crate::response::{lot_details, lot_images, lot_search};
 use base64::Engine;
 use chromiumoxide::cdp::browser_protocol::fetch::{
     ContinueRequestParams, ContinueRequestParamsBuilder, EnableParams, EventRequestPaused,
@@ -13,7 +13,6 @@ use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -26,21 +25,14 @@ use url::Url;
 
 pub type CmdSender = UnboundedSender<CopartBrowserCmd>;
 pub type CmdReceiver = UnboundedReceiver<CopartBrowserCmd>;
-pub type ResponseReceiver<R> = UnboundedReceiver<R>;
-pub type ResponseSender<R> = UnboundedSender<R>;
+pub type ResponseReceiver = UnboundedReceiver<CopartBrowserResponse>;
+pub type ResponseSender = UnboundedSender<CopartBrowserResponse>;
 
 pub type LotNumber = i32;
 pub type PageNumber = usize;
 pub type CorrelationId = String;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Structured;
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Raw;
-
-pub struct CopartBrowser<R: ResponseGenerator> {
-    phantom: PhantomData<R>,
-}
+pub struct CopartBrowser;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CopartBrowserCmd {
@@ -150,15 +142,11 @@ pub trait ResponseGenerator {
     ) -> impl Future<Output = Self::Response> + Send;
 }
 
-impl<R> CopartBrowser<R>
-where
-    R: ResponseGenerator,
-    R::Response: Send + 'static,
-{
+impl CopartBrowser {
     pub async fn run(
         proxy_addr: impl Into<SocketAddr>,
         cancellation_token: CancellationToken,
-    ) -> Result<((CmdSender, ResponseReceiver<R::Response>), Arc<Notify>), BrowserError> {
+    ) -> Result<((CmdSender, ResponseReceiver), Arc<Notify>), BrowserError> {
         let (browser, handler) = Browser::launch(
             BrowserConfig::builder()
                 .user_data_dir(PathBuf::from(format!(
@@ -174,7 +162,7 @@ where
         .expect("browser failed to launch");
 
         let (cmd_sender, cmd_receiver) = tokio::sync::mpsc::unbounded_channel();
-        let (resp_sender, resp_receiver) = tokio::sync::mpsc::unbounded_channel::<R::Response>();
+        let (resp_sender, resp_receiver) = tokio::sync::mpsc::unbounded_channel();
         let done_notifier = Arc::new(Notify::new());
 
         tokio::spawn({
@@ -277,7 +265,7 @@ where
 
     async fn handle_browser_http_requests(
         page: Arc<Page>,
-        response_sender: ResponseSender<R::Response>,
+        response_sender: ResponseSender,
     ) -> Result<JoinHandle<()>, BrowserError> {
         let mut events = page.event_listener::<EventRequestPaused>().await?;
         let join_handle = tokio::spawn(async move {
@@ -327,7 +315,7 @@ where
     async fn branch_http_responses(
         response_event: &EventRequestPaused,
         page: Arc<Page>,
-        response_sender: &ResponseSender<R::Response>,
+        response_sender: &ResponseSender,
     ) {
         if response_event
             .request
@@ -368,7 +356,7 @@ where
 
         let user_response = match &response_event.request.url {
             url if url.contains("/lots/") => {
-                R::create_lot_search_response(
+                Self::create_lot_search_response(
                     response_event,
                     Arc::clone(&page),
                     correlation_id.to_owned(),
@@ -376,7 +364,7 @@ where
                 .await
             }
             url if url.contains("/solr/lotImages/") => {
-                R::create_lot_images_response(
+                Self::create_lot_images_response(
                     response_event,
                     Arc::clone(&page),
                     correlation_id.to_owned(),
@@ -384,7 +372,7 @@ where
                 .await
             }
             url if url.contains("/solr/") => {
-                R::create_lot_details_response(
+                Self::create_lot_details_response(
                     response_event,
                     Arc::clone(&page),
                     correlation_id.to_owned(),
@@ -410,7 +398,7 @@ where
     }
 }
 
-impl ResponseGenerator for Structured {
+impl ResponseGenerator for CopartBrowser {
     type Response = CopartBrowserResponse;
 
     async fn create_lot_search_response(
@@ -487,43 +475,6 @@ impl ResponseGenerator for Structured {
             correlation_id,
             variant: CopartBrowserResponseVariant::LotImages(create_variant().await),
         }
-    }
-}
-
-impl ResponseGenerator for Raw {
-    type Response = serde_json::Value;
-
-    async fn create_lot_search_response(
-        response_event: &EventRequestPaused,
-        page: Arc<Page>,
-        _correlation_id: CorrelationId,
-    ) -> Self::Response {
-        let b64 = get_browser_response_body(&page, response_event.request_id.clone())
-            .await
-            .unwrap();
-        base64_body_into_json(b64).unwrap()
-    }
-
-    async fn create_lot_details_response(
-        response_event: &EventRequestPaused,
-        page: Arc<Page>,
-        _correlation_id: CorrelationId,
-    ) -> Self::Response {
-        let b64 = get_browser_response_body(&page, response_event.request_id.clone())
-            .await
-            .unwrap();
-        base64_body_into_json(b64).unwrap()
-    }
-
-    async fn create_lot_images_response(
-        response_event: &EventRequestPaused,
-        page: Arc<Page>,
-        _correlation_id: CorrelationId,
-    ) -> Self::Response {
-        let b64 = get_browser_response_body(&page, response_event.request_id.clone())
-            .await
-            .unwrap();
-        base64_body_into_json(b64).unwrap()
     }
 }
 
