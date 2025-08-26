@@ -1,4 +1,4 @@
-use crate::Task;
+use crate::{minutes, Task};
 use async_trait::async_trait;
 use browser::copart::browser::{CopartBrowserCmd, CopartBrowserCmdVariant};
 use common::kafka::KafkaSender;
@@ -47,7 +47,7 @@ impl Task for CopartLotSearchTask {
     }
 
     fn duration(&self) -> tokio::time::Duration {
-        tokio::time::Duration::from_secs(60 * 15)
+        minutes(30)
     }
 
     fn descriptor(&self) -> Option<&'static str> {

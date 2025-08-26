@@ -14,6 +14,7 @@ pub struct Scheduler {
 #[async_trait]
 pub trait Task: Send {
     async fn run(&self);
+
     fn duration(&self) -> tokio::time::Duration;
 
     fn descriptor(&self) -> Option<&'static str> {
@@ -76,6 +77,18 @@ impl Scheduler {
     }
 }
 
+pub fn minutes(m: u64) -> tokio::time::Duration {
+    tokio::time::Duration::from_secs(m * 60)
+}
+
+pub fn hours(h: u64) -> tokio::time::Duration {
+    minutes(h * 60)
+}
+
+pub fn days(d: u64) -> tokio::time::Duration {
+    hours(d * 24)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{Scheduler, Task};
@@ -106,9 +119,15 @@ mod tests {
             .with_task(Box::new(NopTask { sender: tx2 }));
         tokio::spawn(scheduler.run_blocking());
 
-        tokio::time::advance(tokio::time::Duration::from_millis(3000)).await;
+        tokio::time::advance(tokio::time::Duration::from_secs(2)).await;
+        assert!(rx1.try_recv().is_err());
+        assert!(rx2.try_recv().is_err());
+
+        tokio::time::advance(tokio::time::Duration::from_secs(1)).await;
         assert_eq!(rx1.recv().await, Some(()));
         assert_eq!(rx2.recv().await, Some(()));
+
+        tokio::time::advance(tokio::time::Duration::from_secs(3)).await;
         assert_eq!(rx1.recv().await, Some(()));
         assert_eq!(rx2.recv().await, Some(()));
     }
