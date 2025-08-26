@@ -1,5 +1,5 @@
-use crate::copart::client::ICopartRequester;
-use crate::copart::io::{CopartImageBlobCmd, CopartRequesterCmd, CopartRequesterResponse};
+use crate::copart::client::CopartRequesterExt;
+use crate::copart::{CopartImageBlobCmd, CopartRequesterCmd, CopartRequesterResponse};
 use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Notify;
@@ -13,17 +13,17 @@ pub struct ExternalSignaling {
     pub response_receiver: UnboundedReceiver<MsgOut>,
 }
 
-pub struct CopartRequesterSink<R: ICopartRequester> {
+pub struct CopartRequesterSink<R: CopartRequesterExt> {
     cmd_receiver: UnboundedReceiver<MsgIn>,
     msg_handler: Arc<SingleMsgHandler<R>>,
 }
 
-struct SingleMsgHandler<R: ICopartRequester> {
+struct SingleMsgHandler<R: CopartRequesterExt> {
     requester: R,
     response_sender: UnboundedSender<MsgOut>,
 }
 
-impl<R: ICopartRequester> SingleMsgHandler<R> {
+impl<R: CopartRequesterExt> SingleMsgHandler<R> {
     async fn handle_message(&self, msg: MsgIn) {
         match msg {
             CopartRequesterCmd::LotImageBlobs { cmds } => self.handle_lot_images(cmds).await,
@@ -40,7 +40,7 @@ impl<R: ICopartRequester> SingleMsgHandler<R> {
 
 impl<R> CopartRequesterSink<R>
 where
-    R: ICopartRequester + Send + Sync + 'static,
+    R: CopartRequesterExt + Send + Sync + 'static,
 {
     pub fn new(requester: R) -> (Self, ExternalSignaling) {
         let (cmd_sender, cmd_receiver) = tokio::sync::mpsc::unbounded_channel();
@@ -84,5 +84,51 @@ where
                 }
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::copart::sink::{CopartRequesterSink, MsgIn};
+    use crate::copart::CopartImageSet;
+    use async_trait::async_trait;
+    use std::time::Duration;
+    use tokio::time::Instant;
+
+    struct NopCopartRequester;
+
+    #[async_trait]
+    impl CopartRequesterExt for NopCopartRequester {
+        async fn download_images(&self, _cmds: Vec<CopartImageBlobCmd>) -> Vec<CopartImageSet> {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            vec![CopartImageSet {
+                standard: None,
+                high_res: None,
+                thumbnail: None,
+            }]
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sink_concurrency() -> Result<(), Box<dyn std::error::Error>> {
+        let (sink, mut sig) = CopartRequesterSink::new(NopCopartRequester);
+        tokio::spawn(sink.run_blocking());
+
+        for _ in 0..16 {
+            sig.cmd_sender.send(MsgIn::LotImageBlobs { cmds: vec![] })?;
+        }
+
+        let mut responses = vec![];
+        let start = Instant::now();
+        for _ in 0..16 {
+            let resp = sig.response_receiver.recv().await.ok_or("recv error")?;
+            responses.push(resp);
+        }
+
+        assert_eq!(start.elapsed().as_millis() < 25, true);
+        assert_eq!(responses.len(), 16);
+
+        Ok(())
     }
 }
