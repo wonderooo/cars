@@ -1,5 +1,9 @@
+use common::kafka::{KafkaReceiver, KafkaSender};
 use common::logging::setup_logging;
+use persister::copart::adapter::{CopartSinkRxKafkaAdapter, CopartSinkTxKafkaAdapter};
+use persister::copart::sink::CopartPersisterSink;
 use persister::copart::CopartPersister;
+use tokio::join;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -8,13 +12,35 @@ async fn main() {
     setup_logging("persister");
     let cancellation_token = CancellationToken::new();
 
-    let persister_done = CopartPersister::run(cancellation_token.clone());
+    let (sink, sig) = CopartPersisterSink::new(CopartPersister);
+    let sink_done = sink.run(cancellation_token.clone());
+
+    let rx_done = KafkaReceiver::new(
+        "localhost:9092",
+        "consumer_group",
+        &[
+            "copart_response_lot_search",
+            "copart_response_lot_image_blobs",
+        ],
+    )
+    .run_on(
+        CopartSinkTxKafkaAdapter {
+            cmd_sender: sig.cmd_sender,
+        },
+        cancellation_token.clone(),
+    );
+    let tx_done = KafkaSender::new("localhost:9092").run_on(
+        CopartSinkRxKafkaAdapter {
+            response_receiver: sig.response_receiver,
+        },
+        cancellation_token.clone(),
+    );
 
     tokio::signal::ctrl_c()
         .await
         .expect("failed to listen for ctrl c event");
     info!("exiting");
     cancellation_token.cancel();
-    persister_done.notified().await;
+    join!(tx_done.notified(), rx_done.notified(), sink_done.notified());
     info!("exited");
 }

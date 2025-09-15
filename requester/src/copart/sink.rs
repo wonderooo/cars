@@ -1,12 +1,14 @@
 use crate::copart::client::CopartRequesterExt;
-use crate::copart::{CopartImageBlobCmd, CopartRequesterCmd, CopartRequesterResponse};
+use common::io::copart::{CopartResponse, LotImageBlobsResponse, LotImagesResponse};
+use common::io::error::GeneralError;
 use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
+use tracing::warn;
 
-pub type MsgIn = CopartRequesterCmd;
-pub type MsgOut = CopartRequesterResponse;
+pub type MsgIn = CopartResponse;
+pub type MsgOut = CopartResponse;
 
 pub struct ExternalSignaling {
     pub cmd_sender: UnboundedSender<MsgIn>,
@@ -26,15 +28,25 @@ struct SingleMsgHandler<R: CopartRequesterExt> {
 impl<R: CopartRequesterExt> SingleMsgHandler<R> {
     async fn handle_message(&self, msg: MsgIn) {
         match msg {
-            CopartRequesterCmd::LotImageBlobs { cmds } => self.handle_lot_images(cmds).await,
+            MsgIn::LotImages(resp) => self.handle_lot_images(resp).await,
+            MsgIn::LotImageBlobs(_) => warn!(""),
+            MsgIn::LotSearch(_) => warn!(""),
         }
     }
 
-    async fn handle_lot_images(&self, cmds: Vec<CopartImageBlobCmd>) {
-        let images = self.requester.download_images(cmds).await;
-        self.response_sender
-            .send(CopartRequesterResponse::LotImageBlobs { images })
-            .unwrap();
+    async fn handle_lot_images(&self, incoming_msg: Result<LotImagesResponse, GeneralError>) {
+        match incoming_msg {
+            Ok(images) => {
+                let blobs = self.requester.download_images(images.response).await;
+                let _ =
+                    self.response_sender
+                        .send(MsgOut::LotImageBlobs(Ok(LotImageBlobsResponse {
+                            lot_number: images.lot_number,
+                            response: blobs,
+                        })));
+            }
+            Err(e) => {}
+        }
     }
 }
 
@@ -91,8 +103,8 @@ where
 mod tests {
     use super::*;
     use crate::copart::sink::{CopartRequesterSink, MsgIn};
-    use crate::copart::CopartImageSet;
     use async_trait::async_trait;
+    use common::io::copart::{LotImageBlobs, LotImages};
     use std::time::Duration;
     use tokio::time::Instant;
 
@@ -100,9 +112,9 @@ mod tests {
 
     #[async_trait]
     impl CopartRequesterExt for NopCopartRequester {
-        async fn download_images(&self, _cmds: Vec<CopartImageBlobCmd>) -> Vec<CopartImageSet> {
+        async fn download_images(&self, _cmds: Vec<LotImages>) -> Vec<LotImageBlobs> {
             tokio::time::sleep(Duration::from_millis(20)).await;
-            vec![CopartImageSet {
+            vec![LotImageBlobs {
                 standard: None,
                 high_res: None,
                 thumbnail: None,
@@ -116,7 +128,10 @@ mod tests {
         tokio::spawn(sink.run_blocking());
 
         for _ in 0..16 {
-            sig.cmd_sender.send(MsgIn::LotImageBlobs { cmds: vec![] })?;
+            sig.cmd_sender.send(MsgIn::LotImages(Ok(LotImagesResponse {
+                lot_number: 69,
+                response: vec![],
+            })))?;
         }
 
         let mut responses = vec![];

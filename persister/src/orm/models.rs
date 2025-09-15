@@ -1,4 +1,5 @@
 pub mod copart {
+    use common::io;
     use diesel::prelude::*;
     use std::ops::{Deref, DerefMut};
 
@@ -35,7 +36,22 @@ pub mod copart {
         }
     }
 
-    impl Into<NewLotVehicles> for browser::response::lot_search::ApiResponse {
+    impl From<Vec<io::copart::LotVehicle>> for NewLotVehicles {
+        fn from(value: Vec<io::copart::LotVehicle>) -> Self {
+            Self(
+                value
+                    .into_iter()
+                    .map(|v| NewLotVehicle {
+                        lot_number: v.lot_number,
+                        make: v.make,
+                        year: v.year,
+                    })
+                    .collect(),
+            )
+        }
+    }
+
+    impl Into<NewLotVehicles> for browser::copart::response::lot_search::ApiResponse {
         fn into(self) -> NewLotVehicles {
             NewLotVehicles(
                 self.data

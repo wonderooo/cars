@@ -1,6 +1,6 @@
 use crate::copart::sink::{MsgIn, MsgOut};
 use async_trait::async_trait;
-use common::kafka::{KafkaError, ReceiveHandle, SendHandle, SendMsg};
+use common::kafka::{KafkaError, ReceiveHandle, SendHandle, SendMsg, ToTopic};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tracing::error;
 
@@ -32,11 +32,9 @@ impl SendHandle for CopartSinkRxKafkaAdapter {
     type TxItem = MsgOut;
 
     async fn next(&mut self) -> Option<SendMsg<Self::TxItem>> {
-        self.response_receiver.recv().await.map(|msg| {
-            let topic = match msg {
-                MsgOut::LotImageBlobs { .. } => "copart_response_lot_image_blobs".to_string(),
-            };
-            SendMsg { topic, msg }
+        self.response_receiver.recv().await.map(|msg| SendMsg {
+            topic: msg.to_topic(),
+            msg,
         })
     }
 }
@@ -44,6 +42,7 @@ impl SendHandle for CopartSinkRxKafkaAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use common::io::copart::{LotImageBlobsResponse, LotImagesResponse};
     use common::kafka::{KafkaAdmin, KafkaReceiver, KafkaSender};
     use testcontainers_modules::kafka::apache;
     use testcontainers_modules::testcontainers::runners::AsyncRunner;
@@ -71,7 +70,10 @@ mod tests {
         let sender = KafkaSender::new(&kafka_addr);
         sender
             .send(
-                &MsgIn::LotImageBlobs { cmds: vec![] },
+                &MsgIn::LotImages(Ok(LotImagesResponse {
+                    lot_number: 69,
+                    response: vec![],
+                })),
                 "copart_response_lot_image_blobs",
             )
             .await?;
@@ -93,7 +95,10 @@ mod tests {
             .create_topic("copart_response_lot_image_blobs")
             .await?;
         tokio::spawn(KafkaSender::new(&kafka_addr).run_on_blocking(rx_adapter));
-        response_sender.send(MsgOut::LotImageBlobs { images: vec![] })?;
+        response_sender.send(MsgOut::LotImageBlobs(Ok(LotImageBlobsResponse {
+            lot_number: 69,
+            response: vec![],
+        })))?;
 
         assert!(
             KafkaReceiver::new(

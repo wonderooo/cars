@@ -1,86 +1,42 @@
-mod error;
+pub mod adapter;
+pub mod sink;
 
-use crate::copart::error::PersisterError;
 use crate::orm::models::copart::NewLotVehicles;
 use crate::orm::schema::lot_vehicle::dsl::lot_vehicle;
 use crate::orm::schema::lot_vehicle::lot_number;
 use crate::orm::PG_POOL;
-use browser::browser::{
-    CopartBrowserCmd, CopartBrowserCmdVariant, CopartBrowserResponse, CopartBrowserResponseVariant,
-    LotSearchResponse,
-};
-use browser::pool::CopartBrowserPoolResponse;
-use common::kafka::{KafkaReceiver, KafkaSender};
+use async_trait::async_trait;
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel_async::RunQueryDsl;
-use futures::StreamExt;
-use std::sync::Arc;
-use tokio::sync::Notify;
-use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info};
-use uuid::Uuid;
+
+use common::io::copart::LotNumber;
+use common::io::error::GeneralError;
+use tracing::debug;
+
+#[async_trait]
+pub trait CopartPersisterExt {
+    async fn save_new_lot_vehicles(
+        &self,
+        new_lot_vehicles: NewLotVehicles,
+    ) -> Result<Vec<LotNumber>, GeneralError>;
+}
 
 pub struct CopartPersister;
 
 impl CopartPersister {
-    pub fn run(cancellation_token: CancellationToken) -> Arc<Notify> {
-        info!("running copart persister");
-        let sender = Arc::new(KafkaSender::new("localhost:9092"));
-        let response_rx_done =
-            KafkaReceiver::<CopartBrowserPoolResponse<CopartBrowserResponse>>::new(
-                "localhost:9092",
-                "copart_response_lot_search_0",
-                &["copart_response_lot_search"],
-                cancellation_token,
-            )
-            .run(move |msg| {
-                let sender = Arc::clone(&sender);
-                async move {
-                    if let Err(e) = Self::on_response(msg, sender).await {
-                        error!("error on processing copart browser response: {e}")
-                    }
-                }
-            });
-
-        let persister_done = Arc::new(Notify::new());
-        tokio::spawn({
-            let persister_done = persister_done.clone();
-            async move {
-                tokio::join!(response_rx_done.notified());
-                info!("copart persister closed");
-                persister_done.notify_waiters();
-            }
-        });
-
-        persister_done
+    pub fn new() -> Self {
+        Self
     }
+}
 
-    async fn on_response(
-        msg: CopartBrowserPoolResponse<CopartBrowserResponse>,
-        sender: impl AsRef<KafkaSender>,
-    ) -> Result<(), PersisterError> {
-        match msg.inner.variant {
-            CopartBrowserResponseVariant::LotSearch(response) => {
-                Self::on_lot_search_response(response?, sender).await?
-            }
-            CopartBrowserResponseVariant::LotDetails(response) => todo!(),
-            CopartBrowserResponseVariant::LotImages(response) => todo!(),
-        }
-
-        Ok(())
-    }
-
-    async fn on_lot_search_response(
-        lot_search_response: LotSearchResponse,
-        sender: impl AsRef<KafkaSender>,
-    ) -> Result<(), PersisterError> {
-        let page_number = lot_search_response.page_number;
-        let response = lot_search_response.response;
-
-        debug!("received copart lot search response for page number `{page_number}`");
-        let new_lot_vehicles: NewLotVehicles = response.into();
+#[async_trait]
+impl CopartPersisterExt for CopartPersister {
+    async fn save_new_lot_vehicles(
+        &self,
+        new_lot_vehicles: NewLotVehicles,
+    ) -> Result<Vec<LotNumber>, GeneralError> {
         debug!(
-            "copart new lot vehicles to save `{}` for page number `{page_number}`",
+            "copart new lot vehicles to save `{}`",
             new_lot_vehicles.len()
         );
 
@@ -91,7 +47,7 @@ impl CopartPersister {
             .load::<i32>(&mut conn)
             .await?;
         debug!(
-            "repeating `{}` copart new lot vehicles for page number `{page_number}`",
+            "repeating `{}` copart new lot vehicles",
             repeating_lns.len()
         );
         let unique_lot_vehicles = new_lot_vehicles
@@ -100,7 +56,7 @@ impl CopartPersister {
             .filter(|lv| !repeating_lns.contains(&lv.lot_number))
             .collect::<Vec<_>>();
         debug!(
-            "unique `{}` copart new lot vehicles for page number `{page_number}`",
+            "unique `{}` copart new lot vehicles",
             unique_lot_vehicles.len()
         );
         let k = diesel::insert_into(crate::orm::schema::lot_vehicle::table)
@@ -108,36 +64,11 @@ impl CopartPersister {
             .on_conflict_do_nothing() // Discard lot vehicles with already existing lot numbers
             .execute(&mut conn)
             .await?;
-        debug!("inserted `{k}` copart new lot vehicles for page number `{page_number}`");
+        debug!("inserted `{k}` copart new lot vehicles");
 
-        // Send lot images cmd for all unique new lot vehicles concurrently
-        futures::stream::iter(unique_lot_vehicles.iter())
-            .for_each_concurrent(None, |lv| {
-                let sender = sender.as_ref();
-                async move {
-                    let correlation_id = Uuid::new_v4();
-                    sender
-                        .send_with_key(
-                            &CopartBrowserCmd {
-                                correlation_id: correlation_id.as_simple().to_string(),
-                                variant: CopartBrowserCmdVariant::LotImages(lv.lot_number),
-                            },
-                            correlation_id.as_simple().to_string(),
-                            "copart_cmd_lot_images",
-                        )
-                        .await;
-                }
-            })
-            .await;
-        debug!(
-            "sent `{}` copart lot images cmd for ln `{:?}` and page number `{page_number}`",
-            unique_lot_vehicles.len(),
-            unique_lot_vehicles
-                .iter()
-                .map(|lv| lv.lot_number)
-                .collect::<Vec<_>>()
-        );
-
-        Ok(())
+        Ok(unique_lot_vehicles
+            .into_iter()
+            .map(|lv| lv.lot_number)
+            .collect())
     }
 }

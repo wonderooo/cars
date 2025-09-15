@@ -1,37 +1,26 @@
 use crate::copart::browser::{
-    CmdReceiver, CmdSender, CopartBrowser, CopartBrowserCmd, CopartBrowserResponse,
-    ResponseReceiver,
+    CmdReceiver, CmdSender, CopartBrowser, ResponseReceiver, ResponseSender,
 };
-use crate::copart::error::PoolError;
+use common::io::copart::{CopartCmd, CopartResponse};
+use common::io::error::GeneralError;
 use futures::StreamExt;
-use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Notify;
 use tokio::task::AbortHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
-pub type PoolResponseReceiver = UnboundedReceiver<CopartBrowserPoolResponse>;
-pub type PoolResponseSender = UnboundedSender<CopartBrowserPoolResponse>;
-
 pub struct CopartBrowserPool;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CopartBrowserPoolResponse {
-    pub inner: CopartBrowserResponse,
-    pub ord: usize,
-}
 
 impl CopartBrowserPool {
     pub async fn run(
         num_workers: usize,
         proxy_addr: impl Into<SocketAddr> + Clone,
         cancellation_token: CancellationToken,
-    ) -> ((CmdSender, PoolResponseReceiver), Arc<Notify>) {
+    ) -> ((CmdSender, ResponseReceiver), Arc<Notify>) {
         let (global_cmd_sender, global_cmd_receiver) = tokio::sync::mpsc::unbounded_channel();
         let (global_response_sender, global_response_receiver) =
             tokio::sync::mpsc::unbounded_channel();
@@ -56,7 +45,7 @@ impl CopartBrowserPool {
         num_workers: usize,
         proxy_addr: impl Into<SocketAddr> + Clone,
         cancellation_token: CancellationToken,
-        global_response_sender: PoolResponseSender,
+        global_response_sender: ResponseSender,
     ) -> (VecDeque<CmdSender>, Vec<Arc<Notify>>, Vec<AbortHandle>) {
         futures::stream::iter(0..num_workers)
             .map(async |idx| {
@@ -80,20 +69,15 @@ impl CopartBrowserPool {
     }
 
     fn response_receive_handler(
-        global_response_sender: PoolResponseSender,
+        global_response_sender: ResponseSender,
         mut response_receiver: ResponseReceiver,
         ord: usize,
     ) -> AbortHandle {
-        let handle_response = |response: CopartBrowserResponse,
-                               global_response_sender: &PoolResponseSender,
-                               ord: usize|
-         -> Result<(), PoolError> {
-            let pool_response = CopartBrowserPoolResponse {
-                inner: response,
-                ord,
-            };
-            Ok(global_response_sender.send(pool_response)?)
-        };
+        let handle_response =
+            |response: CopartResponse,
+             global_response_sender: &ResponseSender,
+             _ord: usize|
+             -> Result<(), GeneralError> { Ok(global_response_sender.send(response)?) };
 
         let join_handle = tokio::spawn(async move {
             while let Some(response) = response_receiver.recv().await {
@@ -110,14 +94,15 @@ impl CopartBrowserPool {
         mut global_cmd_receiver: CmdReceiver,
         mut local_cmd_senders: VecDeque<CmdSender>,
     ) -> AbortHandle {
-        let handle_cmd =
-            async |cmd: CopartBrowserCmd, local_cmd_senders: &mut VecDeque<CmdSender>| {
-                let sender = local_cmd_senders.pop_front().ok_or(PoolError::NodesEmpty)?;
-                sender.send(cmd)?;
-                local_cmd_senders.push_back(sender);
+        let handle_cmd = async |cmd: CopartCmd, local_cmd_senders: &mut VecDeque<CmdSender>| {
+            let sender = local_cmd_senders
+                .pop_front()
+                .ok_or(GeneralError::BrowserPoolEmpty)?;
+            sender.send(cmd)?;
+            local_cmd_senders.push_back(sender);
 
-                Ok::<(), PoolError>(())
-            };
+            Ok::<(), GeneralError>(())
+        };
 
         let join_handle = tokio::spawn(async move {
             while let Some(cmd) = global_cmd_receiver.recv().await {

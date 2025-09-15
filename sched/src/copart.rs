@@ -1,9 +1,8 @@
 use crate::{minutes, Task};
 use async_trait::async_trait;
-use browser::copart::browser::{CopartBrowserCmd, CopartBrowserCmdVariant};
-use common::kafka::KafkaSender;
+use common::io::copart::CopartCmd;
+use common::kafka::{KafkaSender, ToTopic};
 use tracing::{debug, error, info};
-use uuid::Uuid;
 
 pub struct CopartLotSearchTask {
     cmd_sender: KafkaSender,
@@ -25,19 +24,8 @@ impl Default for CopartLotSearchTask {
 impl Task for CopartLotSearchTask {
     async fn run(&self) {
         for page in 0..150 {
-            let correlation_id = Uuid::new_v4();
-            if let Err(e) = self
-                .cmd_sender
-                .send_with_key(
-                    &CopartBrowserCmd {
-                        correlation_id: correlation_id.as_simple().to_string(),
-                        variant: CopartBrowserCmdVariant::LotSearch(page),
-                    },
-                    correlation_id.as_simple().to_string(),
-                    "copart_cmd_lot_search",
-                )
-                .await
-            {
+            let cmd = CopartCmd::LotSearch(page);
+            if let Err(e) = self.cmd_sender.send(&cmd, &cmd.to_topic()).await {
                 error!("kafka message send failed: `{e}`")
             } else {
                 debug!("sent lot search command for page: {page}")

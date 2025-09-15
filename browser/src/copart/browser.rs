@@ -1,7 +1,5 @@
-use crate::copart::error::BrowserError;
 use crate::copart::request;
-use crate::copart::response::{lot_details, lot_images, lot_search};
-use crate::impl_display_and_debug;
+use crate::copart::response::{lot_images, lot_search};
 use base64::Engine;
 use chromiumoxide::cdp::browser_protocol::fetch::{
     ContinueRequestParams, ContinueRequestParamsBuilder, EnableParams, EventRequestPaused,
@@ -9,10 +7,11 @@ use chromiumoxide::cdp::browser_protocol::fetch::{
 };
 use chromiumoxide::cdp::browser_protocol::network::ResourceType;
 use chromiumoxide::{Browser, BrowserConfig, Handler, Page};
+use common::io::copart::{CopartCmd, CopartResponse, LotImagesResponse, LotSearchResponse};
+use common::io::error::GeneralError;
 use futures::StreamExt;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
-use std::fmt::{Debug, Formatter};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -23,102 +22,12 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use url::Url;
 
-pub type CmdSender = UnboundedSender<CopartBrowserCmd>;
-pub type CmdReceiver = UnboundedReceiver<CopartBrowserCmd>;
-pub type ResponseReceiver = UnboundedReceiver<CopartBrowserResponse>;
-pub type ResponseSender = UnboundedSender<CopartBrowserResponse>;
-
-pub type LotNumber = i32;
-pub type PageNumber = usize;
-pub type CorrelationId = String;
+pub type CmdSender = UnboundedSender<CopartCmd>;
+pub type CmdReceiver = UnboundedReceiver<CopartCmd>;
+pub type ResponseReceiver = UnboundedReceiver<CopartResponse>;
+pub type ResponseSender = UnboundedSender<CopartResponse>;
 
 pub struct CopartBrowser;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CopartBrowserCmd {
-    pub correlation_id: CorrelationId,
-    pub variant: CopartBrowserCmdVariant,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum CopartBrowserCmdVariant {
-    LotSearch(PageNumber),
-    LotDetails(LotNumber),
-    LotImages(LotNumber),
-}
-
-impl CopartBrowserCmd {
-    fn url(&self) -> String {
-        match self.variant {
-            CopartBrowserCmdVariant::LotSearch(page_number) => format!(
-                "https://www.copart.ca/public/lots/search-results?correlationId={}&pageNumber={page_number}",
-                self.correlation_id
-            ),
-            CopartBrowserCmdVariant::LotDetails(lot_number) => format!(
-                "https://www.copart.ca/public/data/lotdetails/solr/{lot_number}?correlationId={}&lotNumber={lot_number}",
-                self.correlation_id,
-            ),
-            CopartBrowserCmdVariant::LotImages(lot_number) => format!(
-                "https://www.copart.ca/public/data/lotdetails/solr/lotImages/{lot_number}?correlationId={}&lotNumber={lot_number}",
-                self.correlation_id,
-            ),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct CopartBrowserResponse {
-    pub correlation_id: CorrelationId,
-    pub variant: CopartBrowserResponseVariant,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct LotSearchResponse {
-    pub page_number: PageNumber,
-    pub response: lot_search::ApiResponse,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct LotDetailsResponse {
-    pub lot_number: LotNumber,
-    pub response: lot_details::ApiResponse,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct LotImagesResponse {
-    pub lot_number: LotNumber,
-    pub response: lot_images::ApiResponse,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum CopartBrowserResponseVariant {
-    LotSearch(Result<LotSearchResponse, BrowserError>),
-    LotDetails(Result<LotDetailsResponse, BrowserError>),
-    LotImages(Result<LotImagesResponse, BrowserError>),
-}
-
-impl CopartBrowserResponseVariant {
-    pub fn topic(&self) -> &str {
-        match &self {
-            CopartBrowserResponseVariant::LotSearch(_) => "copart_response_lot_search",
-            CopartBrowserResponseVariant::LotDetails(_) => unreachable!(),
-            CopartBrowserResponseVariant::LotImages(_) => "copart_response_lot_images",
-        }
-    }
-}
-
-impl_display_and_debug!(
-    CopartBrowserResponse,
-    |s: &CopartBrowserResponse, f: &mut Formatter<'_>| {
-        match &s.variant {
-            CopartBrowserResponseVariant::LotSearch(r) => {
-                write!(f, "{r:?} for correlation id `{}`", s.correlation_id)
-            }
-            CopartBrowserResponseVariant::LotDetails(_) => write!(f, "LotDetails"),
-            CopartBrowserResponseVariant::LotImages(_) => write!(f, "LotImages"),
-        }
-    }
-);
 
 pub trait ResponseGenerator {
     type Response;
@@ -126,19 +35,11 @@ pub trait ResponseGenerator {
     fn create_lot_search_response(
         response_event: &EventRequestPaused,
         page: Arc<Page>,
-        correlation_id: CorrelationId,
-    ) -> impl Future<Output = Self::Response> + Send;
-
-    fn create_lot_details_response(
-        response_event: &EventRequestPaused,
-        page: Arc<Page>,
-        correlation_id: CorrelationId,
     ) -> impl Future<Output = Self::Response> + Send;
 
     fn create_lot_images_response(
         response_event: &EventRequestPaused,
         page: Arc<Page>,
-        correlation_id: CorrelationId,
     ) -> impl Future<Output = Self::Response> + Send;
 }
 
@@ -146,7 +47,7 @@ impl CopartBrowser {
     pub async fn run(
         proxy_addr: impl Into<SocketAddr>,
         cancellation_token: CancellationToken,
-    ) -> Result<((CmdSender, ResponseReceiver), Arc<Notify>), BrowserError> {
+    ) -> Result<((CmdSender, ResponseReceiver), Arc<Notify>), GeneralError> {
         let (browser, handler) = Browser::launch(
             BrowserConfig::builder()
                 .user_data_dir(PathBuf::from(format!(
@@ -208,7 +109,7 @@ impl CopartBrowser {
         })
     }
 
-    async fn setup_page(browser: &Browser) -> Result<Arc<Page>, BrowserError> {
+    async fn setup_page(browser: &Browser) -> Result<Arc<Page>, GeneralError> {
         let page = Arc::new(browser.new_page("about:blank").await?);
         page.enable_stealth_mode().await?;
         page.execute(EnableParams {
@@ -248,10 +149,19 @@ impl CopartBrowser {
     async fn handle_browser_user_requests(
         page: Arc<Page>,
         mut cmd_receiver: CmdReceiver,
-    ) -> Result<JoinHandle<()>, BrowserError> {
+    ) -> Result<JoinHandle<()>, GeneralError> {
         let join_handle = tokio::spawn(async move {
             while let Some(cmd) = cmd_receiver.recv().await {
-                let url = cmd.url();
+                let url = match cmd {
+                    CopartCmd::LotSearch(pn) => {
+                        format!("https://www.copart.ca/public/lots/search-results?pageNumber={pn}")
+                    }
+                    CopartCmd::LotImages(ln) => {
+                        format!(
+                            "https://www.copart.ca/public/data/lotdetails/solr/lotImages/{ln}?lotNumber={ln}"
+                        )
+                    }
+                };
                 if let Err(e) = page.goto(url).await {
                     error!("browser goto error: {}", e);
                 }
@@ -266,7 +176,7 @@ impl CopartBrowser {
     async fn handle_browser_http_requests(
         page: Arc<Page>,
         response_sender: ResponseSender,
-    ) -> Result<JoinHandle<()>, BrowserError> {
+    ) -> Result<JoinHandle<()>, GeneralError> {
         let mut events = page.event_listener::<EventRequestPaused>().await?;
         let join_handle = tokio::spawn(async move {
             while let Some(event) = events.next().await {
@@ -295,11 +205,11 @@ impl CopartBrowser {
     async fn handle_lot_search_request(
         page: impl AsRef<Page>,
         event: impl AsRef<EventRequestPaused>,
-    ) -> Result<(), BrowserError> {
+    ) -> Result<(), GeneralError> {
         let qp = parse_query_params(&event.as_ref().request.url)?;
         let page_number = qp
             .get("pageNumber")
-            .ok_or(BrowserError::PageNumberNotFound)?
+            .ok_or(GeneralError::PageNumberNotFound)?
             .parse::<usize>()?;
         let sr = request::lot_search::SearchRequest::new(page_number);
 
@@ -331,53 +241,12 @@ impl CopartBrowser {
             return;
         }
 
-        let correlation_id = match parse_query_params(&response_event.request.url) {
-            Ok(qp) => match qp.get("correlationId") {
-                Some(id) => id.clone(),
-                None => {
-                    warn!(
-                        "correlationId not found in response URL: {}",
-                        response_event.request.url
-                    );
-                    continue_browser_request(&page, response_event.request_id.clone())
-                        .await
-                        .unwrap_or_else(|e| error!("continue browser request error: {e}"));
-                    return;
-                }
-            },
-            Err(e) => {
-                warn!("failed to parse url query params: {}", e);
-                continue_browser_request(&page, response_event.request_id.clone())
-                    .await
-                    .unwrap_or_else(|e| error!("continue browser request error: {e}"));
-                return;
-            }
-        };
-
         let user_response = match &response_event.request.url {
             url if url.contains("/lots/") => {
-                Self::create_lot_search_response(
-                    response_event,
-                    Arc::clone(&page),
-                    correlation_id.to_owned(),
-                )
-                .await
+                Self::create_lot_search_response(response_event, Arc::clone(&page)).await
             }
             url if url.contains("/solr/lotImages/") => {
-                Self::create_lot_images_response(
-                    response_event,
-                    Arc::clone(&page),
-                    correlation_id.to_owned(),
-                )
-                .await
-            }
-            url if url.contains("/solr/") => {
-                Self::create_lot_details_response(
-                    response_event,
-                    Arc::clone(&page),
-                    correlation_id.to_owned(),
-                )
-                .await
+                Self::create_lot_images_response(response_event, Arc::clone(&page)).await
             }
             url => {
                 warn!("intercepted unhandled url: {}", url);
@@ -399,82 +268,52 @@ impl CopartBrowser {
 }
 
 impl ResponseGenerator for CopartBrowser {
-    type Response = CopartBrowserResponse;
+    type Response = CopartResponse;
 
     async fn create_lot_search_response(
         response_event: &EventRequestPaused,
         page: Arc<Page>,
-        correlation_id: CorrelationId,
     ) -> Self::Response {
         let create_inner = async || {
             let query_params = parse_query_params(&response_event.request.url)?;
             let page_number = query_params
                 .get("pageNumber")
-                .ok_or(BrowserError::PageNumberNotFound)?
+                .ok_or(GeneralError::PageNumberNotFound)?
                 .parse::<usize>()?;
             let b64 = get_browser_response_body(&page, response_event.request_id.clone()).await?;
             let json = base64_body_into_json(b64)?;
             let response = lot_search::ApiResponse::deserialize(&json)?;
 
             Ok(LotSearchResponse {
-                response,
+                response: response.into(),
                 page_number,
             })
         };
 
-        CopartBrowserResponse {
-            correlation_id,
-            variant: CopartBrowserResponseVariant::LotSearch(create_inner().await),
-        }
-    }
-
-    async fn create_lot_details_response(
-        response_event: &EventRequestPaused,
-        page: Arc<Page>,
-        correlation_id: CorrelationId,
-    ) -> Self::Response {
-        let create_inner = async || {
-            let b64 = get_browser_response_body(&page, response_event.request_id.clone()).await?;
-            let json = base64_body_into_json(b64)?;
-            let response = lot_details::ApiResponse::deserialize(&json)?;
-
-            Ok(LotDetailsResponse {
-                response,
-                lot_number: 1,
-            })
-        };
-
-        CopartBrowserResponse {
-            correlation_id,
-            variant: CopartBrowserResponseVariant::LotDetails(create_inner().await),
-        }
+        CopartResponse::LotSearch(create_inner().await)
     }
 
     async fn create_lot_images_response(
         response_event: &EventRequestPaused,
         page: Arc<Page>,
-        correlation_id: CorrelationId,
     ) -> Self::Response {
         let create_variant = async || {
             let query_params = parse_query_params(&response_event.request.url)?;
             let lot_number = query_params
                 .get("lotNumber")
-                .ok_or(BrowserError::PageNumberNotFound)?
+                .ok_or(GeneralError::PageNumberNotFound)?
                 .parse::<i32>()?;
             let b64 = get_browser_response_body(&page, response_event.request_id.clone()).await?;
             let json = base64_body_into_json(b64)?;
             let response = lot_images::ApiResponse::deserialize(&json)?;
 
             Ok(LotImagesResponse {
-                response,
+                response: response.into(),
                 lot_number,
             })
         };
 
-        CopartBrowserResponse {
-            correlation_id,
-            variant: CopartBrowserResponseVariant::LotImages(create_variant().await),
-        }
+        CopartResponse::LotImages(create_variant().await)
     }
 }
 
@@ -491,7 +330,7 @@ async fn modify_browser_request(
     request_id: RequestId,
     method: impl Into<String>,
     body: impl AsRef<[u8]>,
-) -> Result<(), BrowserError> {
+) -> Result<(), GeneralError> {
     page.as_ref()
         .execute(
             ContinueRequestParamsBuilder::default()
@@ -500,7 +339,7 @@ async fn modify_browser_request(
                 .post_data(base64::engine::general_purpose::STANDARD.encode(body.as_ref()))
                 .header(HeaderEntry::new("Content-Type", "application/json"))
                 .build()
-                .map_err(BrowserError::CdpCommandBuild)?,
+                .map_err(GeneralError::CdpCommandBuild)?,
         )
         .await?;
     Ok(())
@@ -509,7 +348,7 @@ async fn modify_browser_request(
 async fn continue_browser_request(
     page: impl AsRef<Page>,
     request_id: RequestId,
-) -> Result<(), BrowserError> {
+) -> Result<(), GeneralError> {
     page.as_ref()
         .execute(ContinueRequestParams::new(request_id))
         .await?;
@@ -519,7 +358,7 @@ async fn continue_browser_request(
 async fn get_browser_response_body(
     page: impl AsRef<Page>,
     request_id: RequestId,
-) -> Result<String, BrowserError> {
+) -> Result<String, GeneralError> {
     Ok(page
         .as_ref()
         .execute(GetResponseBodyParams::new(request_id))
@@ -527,13 +366,13 @@ async fn get_browser_response_body(
         .map(|b| b.body.clone())?)
 }
 
-fn base64_body_into_json(body: impl AsRef<[u8]>) -> Result<serde_json::Value, BrowserError> {
+fn base64_body_into_json(body: impl AsRef<[u8]>) -> Result<serde_json::Value, GeneralError> {
     let decoded_bytes = base64::engine::general_purpose::STANDARD.decode(body)?;
     let decoded = std::str::from_utf8(&decoded_bytes)?;
     Ok(serde_json::from_str(decoded)?)
 }
 
-pub fn parse_query_params(url: impl AsRef<str>) -> Result<HashMap<String, String>, BrowserError> {
+pub fn parse_query_params(url: impl AsRef<str>) -> Result<HashMap<String, String>, GeneralError> {
     let parsed_url = Url::parse(url.as_ref())?;
     Ok(parsed_url.query_pairs().into_owned().collect())
 }

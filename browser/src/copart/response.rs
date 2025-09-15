@@ -1,174 +1,10 @@
-pub mod lot_details {
-    use serde::{Deserialize, Serialize};
-    use std::fmt::{Display, Formatter};
-
-    #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, PartialOrd)]
-    #[serde(rename_all = "camelCase")]
-    pub struct ApiResponse {
-        pub return_code: i32,
-        pub return_code_desc: String,
-        pub data: Data,
-    }
-
-    #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, PartialOrd)]
-    #[serde(rename_all = "camelCase")]
-    pub struct Data {
-        pub lot_details: LotDetails,
-    }
-
-    #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, PartialOrd)]
-    #[serde(rename_all = "camelCase")]
-    pub struct LotDetails {
-        pub drive_status: bool,
-        pub site_codes: Vec<String>,
-        pub dynamic_lot_details: DynamicLotDetails,
-        pub vehicle_type_code: String,
-        pub sold_to_member: i32,
-        pub show_claim_form: bool,
-        pub lot_plug_acv: f64,
-        pub ready_for_replay_flag: bool,
-        pub inspected_lot: bool,
-        pub car_fax_report_available: bool,
-        pub lot_number_str: String,
-        pub lot_yard_same_as_kiosk_yard: bool,
-        pub pwlot: bool,
-        pub lot_sold: bool,
-        pub ln: i64,
-        pub mkn: String,
-        pub lmg: String,
-        pub lm: String,
-        pub mmod: String,
-        pub mtrim: String,
-        pub lcy: i32,
-        pub fv: String,
-        pub lh: String,
-        pub la: f64,
-        pub rc: f64,
-        pub orr: f64,
-        pub egn: String,
-        pub cy: String,
-        pub ld: String,
-        pub yn: String,
-        pub cuc: String,
-        pub tz: String,
-        pub lad: i64,
-        pub at: String,
-        pub aan: i32,
-        pub hb: f64,
-        pub ss: i32,
-        pub bndc: String,
-        pub bnp: f64,
-        pub sbf: bool,
-        pub ts: String,
-        pub dd: String,
-        pub tims: String,
-        pub lic: Vec<String>,
-        pub gr: String,
-        pub dtc: String,
-        pub ynumb: i32,
-        pub phynumb: i32,
-        pub bf: bool,
-        pub ymin: i32,
-        pub long: f64,
-        pub lat: f64,
-        pub zip: String,
-        pub off_flg: bool,
-        pub loc_country: String,
-        pub loc_city: String,
-        pub loc_state: String,
-        pub tsmn: String,
-        pub htsmn: String,
-        pub tmtp: String,
-        pub vfs: bool,
-        pub myb: f64,
-        pub lmc: String,
-        pub lcc: String,
-        pub lcd: String,
-        pub clr: String,
-        pub ft: String,
-        pub hk: String,
-        pub drv: String,
-        pub ess: String,
-        pub slfg: bool,
-        pub lsts: String,
-        pub show_seller: bool,
-        pub sstpflg: bool,
-        pub hcr: bool,
-        pub veh_typ_desc: String,
-        pub syn: String,
-        pub ifs: bool,
-        pub ils: bool,
-        pub pbf: bool,
-        pub crg: f64,
-        pub lu: i64,
-        pub brand: String,
-        pub mof: bool,
-        pub blucar: bool,
-        pub hegn: String,
-        pub lstg: i32,
-        pub ldu: String,
-        pub pcf: bool,
-        pub btcf: bool,
-        pub tpfs: bool,
-        pub trf: bool,
-        pub csc: String,
-        pub mlf: bool,
-        pub fcd: bool,
-        pub hevu: bool,
-        pub hcvu: bool,
-        pub uvip: Option<bool>,
-        pub slgc: String,
-        pub cfx: bool,
-        pub hcfx: bool,
-        pub hide_lane_item: bool,
-        pub hide_grid_row: bool,
-        pub is_pwlot: Option<bool>,
-        pub lspa: f64,
-    }
-
-    #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, PartialOrd)]
-    #[serde(rename_all = "camelCase")]
-    pub struct DynamicLotDetails {
-        pub error_code: String,
-        pub buyer_number: i32,
-        pub source: String,
-        pub buy_today_bid: f64,
-        pub current_bid: i64,
-        pub total_amount_due: f64,
-        pub sealed_bid: bool,
-        pub first_bid: bool,
-        pub has_bid: bool,
-        pub seller_reserve_met: bool,
-        pub lot_sold: bool,
-        pub bid_status: String,
-        pub sale_status: String,
-        pub counter_bid_status: String,
-        pub starting_bid_flag: bool,
-        pub buyer_high_bidder: bool,
-        pub anonymous: bool,
-        pub non_synced_buyer: bool,
-    }
-
-    impl Display for ApiResponse {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            write!(
-                f,
-                "LotDetails {{ lot_number: {}, make: {}, model: {}, year: {} }}",
-                self.data.lot_details.ln,
-                self.data.lot_details.mkn,
-                self.data.lot_details.lm,
-                self.data.lot_details.lcy
-            )
-        }
-    }
-}
-
 /// Represents response for lot vehicles on the whole page
 pub mod lot_search {
+    use crate::impl_display_and_debug;
+    use common::io::copart::LotVehicle;
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
     use std::fmt::{Debug, Formatter};
-    use crate::impl_display_and_debug;
 
     #[derive(Serialize, Deserialize, Clone, PartialEq)]
     #[serde(rename_all = "camelCase")]
@@ -356,9 +192,25 @@ pub mod lot_search {
         }
         write!(f, "}}")
     });
+
+    impl Into<Vec<LotVehicle>> for ApiResponse {
+        fn into(self) -> Vec<LotVehicle> {
+            self.data
+                .results
+                .content
+                .into_iter()
+                .map(|l| LotVehicle {
+                    lot_number: l.ln as i32,
+                    make: l.mkn,
+                    year: l.lcy,
+                })
+                .collect()
+        }
+    }
 }
 
 pub mod lot_images {
+    use common::io::copart::LotImages;
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -405,5 +257,20 @@ pub mod lot_images {
         pub image_type_enum: String,
         pub high_res: bool,
         pub ln: i64,
+    }
+
+    impl Into<Vec<LotImages>> for ApiResponse {
+        fn into(self) -> Vec<LotImages> {
+            self.data
+                .images_list
+                .content
+                .into_iter()
+                .map(|i| LotImages {
+                    thumbnail_url: i.thumbnail_url,
+                    full_url: i.full_url,
+                    high_res_url: i.high_res_url,
+                })
+                .collect()
+        }
     }
 }

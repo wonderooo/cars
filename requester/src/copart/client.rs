@@ -1,6 +1,6 @@
-use crate::copart::{CopartImageBlobCmd, CopartImageSet};
 use async_trait::async_trait;
 use base64::Engine;
+use common::io::copart::{LotImageBlobs, LotImages};
 use futures::StreamExt;
 use reqwest::IntoUrl;
 use tokio_util::bytes::Bytes;
@@ -14,7 +14,7 @@ pub struct CopartRequester {
 
 #[async_trait]
 pub trait CopartRequesterExt {
-    async fn download_images(&self, cmds: Vec<CopartImageBlobCmd>) -> Vec<CopartImageSet>;
+    async fn download_images(&self, cmds: Vec<LotImages>) -> Vec<LotImageBlobs>;
 }
 
 impl CopartRequester {
@@ -31,7 +31,7 @@ impl CopartRequester {
 
 #[async_trait]
 impl CopartRequesterExt for CopartRequester {
-    async fn download_images(&self, cmds: Vec<CopartImageBlobCmd>) -> Vec<CopartImageSet> {
+    async fn download_images(&self, cmds: Vec<LotImages>) -> Vec<LotImageBlobs> {
         let option_download_content = async |url: Option<String>| match url {
             Some(url) => self.download_content(&url).await.ok(),
             None => None,
@@ -46,7 +46,7 @@ impl CopartRequesterExt for CopartRequester {
                     option_download_content(img.high_res_url)
                 );
 
-                CopartImageSet {
+                LotImageBlobs {
                     standard: standard
                         .map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes)),
                     thumbnail: thumbnail
@@ -91,7 +91,7 @@ mod tests {
     async fn test_concurrent_download() {
         let mock_srv = mock_http_server().await;
         let requester = CopartRequester::new();
-        let cmd = || CopartImageBlobCmd {
+        let cmd = || LotImages {
             thumbnail_url: Some(random_mock_url(&mock_srv)),
             full_url: Some(random_mock_url(&mock_srv)),
             high_res_url: Some(random_mock_url(&mock_srv)),

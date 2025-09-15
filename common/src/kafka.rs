@@ -210,6 +210,10 @@ impl KafkaSender {
     }
 }
 
+pub trait ToTopic {
+    fn to_topic(&self) -> String;
+}
+
 #[derive(Debug, Error)]
 pub enum KafkaError {
     #[error("kafka topic creation failed with code: `{0}`")]
