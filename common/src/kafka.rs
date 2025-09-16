@@ -10,6 +10,7 @@ use rdkafka::util::Timeout;
 use rdkafka::{ClientConfig, Message};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -32,8 +33,13 @@ impl KafkaAdmin {
         }
     }
 
-    pub async fn create_topic(&self, topic: &str) -> Result<(), KafkaError> {
+    pub async fn create_topic_with_options(
+        &self,
+        topic: &str,
+        opts: &HashMap<&str, &str>,
+    ) -> Result<(), KafkaError> {
         let new_topic = NewTopic::new(topic, 1, TopicReplication::Fixed(1));
+        let new_topic = opts.iter().fold(new_topic, |acc, (k, v)| acc.set(k, v));
         let results = self
             .client
             .create_topics(&[new_topic], &AdminOptions::default())
@@ -42,6 +48,34 @@ impl KafkaAdmin {
         // SAFETY: client must produce one topic result
         let result = unsafe { results.into_iter().next().unwrap_unchecked() };
         Ok(result.map(|_| ())?)
+    }
+
+    pub async fn create_topic(&self, topic: &str) -> Result<(), KafkaError> {
+        self.create_topic_with_options(topic, &HashMap::new()).await
+    }
+
+    pub async fn delete_topic(&self, topic: &str) -> Result<(), KafkaError> {
+        let results = self
+            .client
+            .delete_topics(&[topic], &AdminOptions::default())
+            .await?;
+
+        // SAFETY: client must produce one topic result
+        let result = unsafe { results.into_iter().next().unwrap_unchecked() };
+        Ok(result.map(|_| ())?)
+    }
+
+    pub async fn recreate_topic_with_opts(
+        &self,
+        topic: &str,
+        opts: &HashMap<&str, &str>,
+    ) -> Result<(), KafkaError> {
+        self.delete_topic(topic).await?;
+        self.create_topic_with_options(topic, opts).await
+    }
+
+    pub async fn recreate_topic(&self, topic: &str) -> Result<(), KafkaError> {
+        self.recreate_topic_with_opts(topic, &HashMap::new()).await
     }
 
     pub async fn topic_exist(&self, topic: &str) -> Result<bool, KafkaError> {
