@@ -1,8 +1,9 @@
-use common::kafka::{KafkaReceiver, KafkaSender};
+use common::kafka::{KafkaAdmin, KafkaReceiver, KafkaSender};
 use common::logging::setup_logging;
 use persister::copart::adapter::{CopartSinkRxKafkaAdapter, CopartSinkTxKafkaAdapter};
 use persister::copart::sink::CopartPersisterSink;
 use persister::copart::CopartPersister;
+use std::collections::HashMap;
 use tokio::join;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
@@ -14,6 +15,19 @@ async fn main() {
 
     let (sink, sig) = CopartPersisterSink::new(CopartPersister);
     let sink_done = sink.run(cancellation_token.clone());
+
+    let admin = KafkaAdmin::new("localhost:9092");
+    admin
+        .recreate_topic("copart_response_lot_search")
+        .await
+        .expect("failed to recreate `copart_response_lot_search` topic");
+    admin
+        .recreate_topic_with_opts(
+            "copart_response_lot_image_blobs",
+            &HashMap::from([("max.message.bytes", "100000000")]),
+        )
+        .await
+        .expect("failed to recreate `copart_response_lot_image_blobs` topic");
 
     let rx_done = KafkaReceiver::new(
         "localhost:9092",
