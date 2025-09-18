@@ -7,7 +7,9 @@ use chromiumoxide::cdp::browser_protocol::fetch::{
 };
 use chromiumoxide::cdp::browser_protocol::network::ResourceType;
 use chromiumoxide::{Browser, BrowserConfig, Handler, Page};
-use common::io::copart::{CopartCmd, CopartResponse, LotImagesResponse, LotSearchResponse};
+use common::io::copart::{
+    CopartCmd, CopartResponse, LotImagesResponse, LotImagesVector, LotSearchResponse,
+};
 use common::io::error::GeneralError;
 use futures::StreamExt;
 use serde::Deserialize;
@@ -308,7 +310,7 @@ impl ResponseGenerator for CopartBrowser {
             let response = lot_images::ApiResponse::deserialize(&json)?;
 
             Ok(LotImagesResponse {
-                response: response.into(),
+                response: LotImagesVector(response.into()),
                 lot_number,
             })
         };

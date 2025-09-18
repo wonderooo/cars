@@ -95,7 +95,7 @@ pub mod copart {
     use crate::io::error::GeneralError;
     use crate::kafka::ToTopic;
     use serde::{Deserialize, Serialize};
-    use std::fmt::Debug;
+    use std::fmt::{Debug, Formatter};
 
     pub type LotNumber = i32;
     pub type PageNumber = usize;
@@ -151,13 +151,13 @@ pub mod copart {
     #[derive(Debug, Serialize, Deserialize)]
     pub struct LotImagesResponse {
         pub lot_number: LotNumber,
-        pub response: Vec<LotImages>,
+        pub response: LotImagesVector,
     }
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct LotImageBlobsResponse {
         pub lot_number: LotNumber,
-        pub response: Vec<LotImageBlobs>,
+        pub response: LotImageBlobsVector,
     }
 
     #[derive(Debug, Serialize, Deserialize)]
@@ -167,6 +167,9 @@ pub mod copart {
         pub year: i32,
     }
 
+    #[derive(Serialize, Deserialize)]
+    pub struct LotImagesVector(pub Vec<LotImages>);
+
     #[derive(Debug, Serialize, Deserialize)]
     pub struct LotImages {
         pub thumbnail_url: Option<String>,
@@ -174,10 +177,75 @@ pub mod copart {
         pub high_res_url: Option<String>,
     }
 
+    #[derive(Serialize, Deserialize)]
+    pub struct LotImageBlobsVector(pub Vec<LotImageBlobs>);
+
     #[derive(Debug, Serialize, Deserialize)]
     pub struct LotImageBlobs {
         pub standard: Option<Base64Blob>,
         pub high_res: Option<Base64Blob>,
         pub thumbnail: Option<Base64Blob>,
+    }
+
+    impl Debug for LotImagesVector {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            let mut none_thumbnail = 0;
+            let mut some_thumbnail = 0;
+            let mut none_full = 0;
+            let mut some_full = 0;
+            let mut none_high = 0;
+            let mut some_high = 0;
+
+            for images in &self.0 {
+                match images.thumbnail_url {
+                    None => none_thumbnail += 1,
+                    Some(_) => some_thumbnail += 1,
+                }
+                match images.high_res_url {
+                    None => none_high += 1,
+                    Some(_) => some_high += 1,
+                }
+                match images.full_url {
+                    None => none_full += 1,
+                    Some(_) => some_full += 1,
+                }
+            }
+
+            write!(
+                f,
+                "thumbnail_url {{some: {some_thumbnail}, none: {none_thumbnail}}}, high_res_url {{some: {some_high}, none: {none_high}}}, full_url {{some: {some_full}, none: {none_full}}}",
+            )
+        }
+    }
+
+    impl Debug for LotImageBlobsVector {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            let mut none_thumbnail = 0;
+            let mut some_thumbnail = 0;
+            let mut none_std = 0;
+            let mut some_std = 0;
+            let mut none_high = 0;
+            let mut some_high = 0;
+
+            for images in &self.0 {
+                match images.thumbnail {
+                    None => none_thumbnail += 1,
+                    Some(_) => some_thumbnail += 1,
+                }
+                match images.high_res {
+                    None => none_high += 1,
+                    Some(_) => some_high += 1,
+                }
+                match images.standard {
+                    None => none_std += 1,
+                    Some(_) => some_std += 1,
+                }
+            }
+
+            write!(
+                f,
+                "thumbnail {{some: {some_thumbnail}, none: {none_thumbnail}}}, high_res {{some: {some_high}, none: {none_high}}}, standard {{some: {some_std}, none: {none_std}}}",
+            )
+        }
     }
 }

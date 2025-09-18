@@ -42,7 +42,9 @@ impl SendHandle for CopartSinkRxKafkaAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::io::copart::{LotImageBlobsResponse, LotImagesResponse};
+    use common::io::copart::{
+        LotImageBlobsResponse, LotImageBlobsVector, LotImagesResponse, LotImagesVector,
+    };
     use common::kafka::{KafkaAdmin, KafkaReceiver, KafkaSender};
     use testcontainers_modules::kafka::apache;
     use testcontainers_modules::testcontainers::runners::AsyncRunner;
@@ -72,7 +74,7 @@ mod tests {
             .send(
                 &MsgIn::LotImages(Ok(LotImagesResponse {
                     lot_number: 69,
-                    response: vec![],
+                    response: LotImagesVector(vec![]),
                 })),
                 "copart_response_lot_image_blobs",
             )
@@ -97,7 +99,7 @@ mod tests {
         tokio::spawn(KafkaSender::new(&kafka_addr).run_on_blocking(rx_adapter));
         response_sender.send(MsgOut::LotImageBlobs(Ok(LotImageBlobsResponse {
             lot_number: 69,
-            response: vec![],
+            response: LotImageBlobsVector(vec![]),
         })))?;
 
         assert!(

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
-use tracing::warn;
+use tracing::{error, instrument, warn};
 
 pub type MsgIn = CopartResponse;
 pub type MsgOut = CopartResponse;
@@ -34,6 +34,7 @@ impl<R: CopartRequesterExt> SingleMsgHandler<R> {
         }
     }
 
+    #[instrument(skip(self))]
     async fn handle_lot_images(&self, incoming_msg: Result<LotImagesResponse, GeneralError>) {
         match incoming_msg {
             Ok(images) => {
@@ -45,7 +46,7 @@ impl<R: CopartRequesterExt> SingleMsgHandler<R> {
                             response: blobs,
                         })));
             }
-            Err(e) => {}
+            Err(e) => error!(producer_error = ?e, "lot images response is an error"),
         }
     }
 }
@@ -104,7 +105,7 @@ mod tests {
     use super::*;
     use crate::copart::sink::{CopartRequesterSink, MsgIn};
     use async_trait::async_trait;
-    use common::io::copart::{LotImageBlobs, LotImages};
+    use common::io::copart::{LotImageBlobs, LotImageBlobsVector, LotImagesVector};
     use std::time::Duration;
     use tokio::time::Instant;
 
@@ -112,13 +113,13 @@ mod tests {
 
     #[async_trait]
     impl CopartRequesterExt for NopCopartRequester {
-        async fn download_images(&self, _cmds: Vec<LotImages>) -> Vec<LotImageBlobs> {
+        async fn download_images(&self, _cmds: LotImagesVector) -> LotImageBlobsVector {
             tokio::time::sleep(Duration::from_millis(20)).await;
-            vec![LotImageBlobs {
+            LotImageBlobsVector(vec![LotImageBlobs {
                 standard: None,
                 high_res: None,
                 thumbnail: None,
-            }]
+            }])
         }
     }
 
@@ -130,7 +131,7 @@ mod tests {
         for _ in 0..16 {
             sig.cmd_sender.send(MsgIn::LotImages(Ok(LotImagesResponse {
                 lot_number: 69,
-                response: vec![],
+                response: LotImagesVector(vec![]),
             })))?;
         }
 
