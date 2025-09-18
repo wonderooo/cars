@@ -5,7 +5,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
 pub fn setup_logging(module_name: &str) {
-    let others_filter = format!("{module_name}=debug,common=debug");
+    let others_filter = format!("{module_name}=debug");
 
     let stdout_log = tracing_subscriber::fmt::layer()
         .with_writer(std::io::stdout)
