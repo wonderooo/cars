@@ -113,7 +113,7 @@ pub mod copart {
     #[derive(Debug, Serialize, Deserialize)]
     pub enum CopartResponse {
         /// Sent by `browser` after lot search cmd has been received, it includes raw data
-        /// from the provider of lot vehicles for specified page number, received by `persister`
+        /// from the provider of lot vehicles for a specified page number, received by `persister`
         LotSearch(Result<LotSearchResponse, GeneralError>),
         /// Sent by `browser` after lot images cmd has been received, it includes raw data
         /// from the provider of single lot vehicle for specified lot number, received by `requester`
@@ -145,7 +145,7 @@ pub mod copart {
     #[derive(Debug, Serialize, Deserialize)]
     pub struct LotSearchResponse {
         pub page_number: PageNumber,
-        pub response: Vec<LotVehicle>,
+        pub response: LotVehicleVector,
     }
 
     #[derive(Debug, Serialize, Deserialize)]
@@ -159,6 +159,9 @@ pub mod copart {
         pub lot_number: LotNumber,
         pub response: LotImageBlobsVector,
     }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct LotVehicleVector(pub Vec<LotVehicle>);
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct LotVehicle {
@@ -187,29 +190,18 @@ pub mod copart {
         pub thumbnail: Option<Base64Blob>,
     }
 
+    impl Debug for LotVehicleVector {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            write!(f, "n lot vehicles: `{}`", self.0.len())
+        }
+    }
+
     impl Debug for LotImagesVector {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            let mut none_thumbnail = 0;
-            let mut some_thumbnail = 0;
-            let mut none_full = 0;
-            let mut some_full = 0;
-            let mut none_high = 0;
-            let mut some_high = 0;
-
-            for images in &self.0 {
-                match images.thumbnail_url {
-                    None => none_thumbnail += 1,
-                    Some(_) => some_thumbnail += 1,
-                }
-                match images.high_res_url {
-                    None => none_high += 1,
-                    Some(_) => some_high += 1,
-                }
-                match images.full_url {
-                    None => none_full += 1,
-                    Some(_) => some_full += 1,
-                }
-            }
+            let (some_thumbnail, none_thumbnail) =
+                count_some_none(&self.0, |i| i.thumbnail_url.as_deref());
+            let (some_high, none_high) = count_some_none(&self.0, |i| i.high_res_url.as_deref());
+            let (some_full, none_full) = count_some_none(&self.0, |i| i.full_url.as_deref());
 
             write!(
                 f,
@@ -220,32 +212,26 @@ pub mod copart {
 
     impl Debug for LotImageBlobsVector {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            let mut none_thumbnail = 0;
-            let mut some_thumbnail = 0;
-            let mut none_std = 0;
-            let mut some_std = 0;
-            let mut none_high = 0;
-            let mut some_high = 0;
-
-            for images in &self.0 {
-                match images.thumbnail {
-                    None => none_thumbnail += 1,
-                    Some(_) => some_thumbnail += 1,
-                }
-                match images.high_res {
-                    None => none_high += 1,
-                    Some(_) => some_high += 1,
-                }
-                match images.standard {
-                    None => none_std += 1,
-                    Some(_) => some_std += 1,
-                }
-            }
+            let (some_thumbnail, none_thumbnail) =
+                count_some_none(&self.0, |i| i.thumbnail.as_deref());
+            let (some_high, none_high) = count_some_none(&self.0, |i| i.high_res.as_deref());
+            let (some_std, none_std) = count_some_none(&self.0, |i| i.standard.as_deref());
 
             write!(
                 f,
                 "thumbnail {{some: {some_thumbnail}, none: {none_thumbnail}}}, high_res {{some: {some_high}, none: {none_high}}}, standard {{some: {some_std}, none: {none_std}}}",
             )
         }
+    }
+
+    fn count_some_none<I, F>(iter: I, mut field: F) -> (usize, usize)
+    where
+        I: IntoIterator,
+        F: FnMut(&I::Item) -> Option<&str>,
+    {
+        iter.into_iter().fold((0, 0), |acc, x| match field(&x) {
+            Some(_) => (acc.0 + 1, acc.1),
+            None => (acc.0, acc.1 + 1),
+        })
     }
 }

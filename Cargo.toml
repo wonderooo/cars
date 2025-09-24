@@ -8,6 +8,7 @@ members = [
     "requester",
     "sched",
 ]
+exclude = ["playground"]
 resolver = "3"
 
 [profile.wasm-release]

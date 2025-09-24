@@ -1,11 +1,12 @@
 use crate::copart::CopartPersisterExt;
-use common::io::copart::{CopartCmd, CopartResponse, LotSearchResponse};
+use crate::orm::models::copart::NewLotImages;
+use common::io::copart::{CopartCmd, CopartResponse, LotImageBlobsResponse, LotSearchResponse};
 use common::io::error::GeneralError;
 use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, warn};
+use tracing::{error, instrument, warn};
 
 pub struct ExternalSignaling {
     pub cmd_sender: UnboundedSender<CopartResponse>,
@@ -26,9 +27,7 @@ impl<P: CopartPersisterExt> SingleMsgHandler<P> {
     async fn handle_message(&self, msg: CopartResponse) {
         match msg {
             CopartResponse::LotSearch(resp) => self.handle_lot_search(resp).await,
-            CopartResponse::LotImageBlobs(resp) => {
-                unimplemented!("lot image blobs response not implemented: `{resp:?}`");
-            }
+            CopartResponse::LotImageBlobs(resp) => self.handle_lot_image_blobs(resp).await,
             CopartResponse::LotImages(resp) => {
                 warn!(
                     "persister received lot images response, which should never happen: `{resp:?}`"
@@ -37,6 +36,7 @@ impl<P: CopartPersisterExt> SingleMsgHandler<P> {
         }
     }
 
+    #[instrument(skip(self))]
     async fn handle_lot_search(&self, incoming_msg: Result<LotSearchResponse, GeneralError>) {
         match incoming_msg {
             Ok(lsr) => {
@@ -48,10 +48,29 @@ impl<P: CopartPersisterExt> SingleMsgHandler<P> {
                     Ok(lns) => lns.into_iter().for_each(|ln| {
                         let _ = self.response_sender.send(CopartCmd::LotImages(ln));
                     }),
-                    Err(e) => error!(""),
+                    Err(e) => error!(persister_error = ?e, "save new lot vehicles failed"),
                 }
             }
-            Err(e) => error!(""),
+            Err(e) => {
+                error!(producer_error = ?e, "lot search response in an error")
+            }
+        }
+    }
+
+    #[instrument(skip(self))]
+    async fn handle_lot_image_blobs(
+        &self,
+        incoming_msg: Result<LotImageBlobsResponse, GeneralError>,
+    ) {
+        match incoming_msg {
+            Ok(blobs_resp) => {
+                let new_lot_images: NewLotImages = blobs_resp.into();
+                match self.persister.save_new_lot_images(new_lot_images).await {
+                    Ok(_lns) => {}
+                    Err(e) => error!(persister_error = ?e, "save new lot images failed"),
+                }
+            }
+            Err(e) => error!(producer_error = ?e, "lot image blobs response in an error"),
         }
     }
 }

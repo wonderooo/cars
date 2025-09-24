@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 common = { path = "../common", features = ["kafka", "io"] }
-browser = { path = "../browser" }
 tokio-util = "0.7.15"
 tokio = { version = "1.45.1", features = ["full"] }
 tracing = "0.1.41"
@@ -13,3 +12,9 @@ diesel = { version = "2.2.10", features = ["postgres"] }
 diesel-async = { version = "0.6.1", features = ["deadpool", "postgres"] }
 dotenvy = "0.15.7"
 async-trait = "0.1.88"
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.6"
+
+[features]
+prof = ["common/memprof"]

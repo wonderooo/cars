@@ -1,7 +1,7 @@
 pub mod copart {
     use common::io;
+    use common::io::copart::{LotImageBlobsResponse, LotVehicleVector};
     use diesel::prelude::*;
-    use std::ops::{Deref, DerefMut};
 
     #[derive(Queryable, Selectable)]
     #[diesel(table_name = crate::orm::schema::lot_vehicle)]
@@ -23,23 +23,11 @@ pub mod copart {
 
     pub struct NewLotVehicles(pub Vec<NewLotVehicle>);
 
-    impl Deref for NewLotVehicles {
-        type Target = Vec<NewLotVehicle>;
-        fn deref(&self) -> &Self::Target {
-            &self.0
-        }
-    }
-
-    impl DerefMut for NewLotVehicles {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.0
-        }
-    }
-
-    impl From<Vec<io::copart::LotVehicle>> for NewLotVehicles {
-        fn from(value: Vec<io::copart::LotVehicle>) -> Self {
+    impl From<LotVehicleVector> for NewLotVehicles {
+        fn from(value: LotVehicleVector) -> Self {
             Self(
                 value
+                    .0
                     .into_iter()
                     .map(|v| NewLotVehicle {
                         lot_number: v.lot_number,
@@ -51,43 +39,44 @@ pub mod copart {
         }
     }
 
-    impl Into<NewLotVehicles> for browser::copart::response::lot_search::ApiResponse {
-        fn into(self) -> NewLotVehicles {
-            NewLotVehicles(
-                self.data
-                    .results
-                    .content
-                    .into_iter()
-                    .map(|l| NewLotVehicle {
-                        lot_number: l.ln as i32,
-                        make: l.mkn,
-                        year: l.lcy,
-                    })
-                    .collect(),
-            )
-        }
-    }
-
-    pub type Base64Blob = String;
-
     #[derive(Selectable, Queryable, Associations)]
     #[diesel(table_name = crate::orm::schema::lot_image)]
-    #[diesel(belongs_to(LotVehicle))]
+    #[diesel(belongs_to(LotVehicle, foreign_key = lot_vehicle_number))]
     #[diesel(check_for_backend(diesel::pg::Pg))]
     pub struct LotImage {
         pub id: i32,
-        pub blob_standard: Option<Base64Blob>,
-        pub blob_thumbnail: Option<Base64Blob>,
-        pub blob_high_res: Option<Base64Blob>,
-        pub lot_vehicle_id: i32,
+        pub blob_standard: Option<io::copart::Base64Blob>,
+        pub blob_thumbnail: Option<io::copart::Base64Blob>,
+        pub blob_high_res: Option<io::copart::Base64Blob>,
+        pub lot_vehicle_number: i32,
     }
 
     #[derive(Insertable)]
     #[diesel(table_name = crate::orm::schema::lot_image)]
     pub struct NewLotImage {
-        pub blob_standard: Option<Base64Blob>,
-        pub blob_thumbnail: Option<Base64Blob>,
-        pub blob_high_res: Option<Base64Blob>,
-        pub lot_vehicle_id: i32,
+        pub blob_standard: Option<io::copart::Base64Blob>,
+        pub blob_thumbnail: Option<io::copart::Base64Blob>,
+        pub blob_high_res: Option<io::copart::Base64Blob>,
+        pub lot_vehicle_number: i32,
+    }
+
+    pub struct NewLotImages(pub Vec<NewLotImage>);
+
+    impl From<LotImageBlobsResponse> for NewLotImages {
+        fn from(value: LotImageBlobsResponse) -> Self {
+            Self(
+                value
+                    .response
+                    .0
+                    .into_iter()
+                    .map(|i| NewLotImage {
+                        blob_standard: i.standard,
+                        blob_thumbnail: i.thumbnail,
+                        blob_high_res: i.high_res,
+                        lot_vehicle_number: value.lot_number,
+                    })
+                    .collect(),
+            )
+        }
     }
 }
