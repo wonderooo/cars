@@ -4,3 +4,5 @@ pub mod io;
 pub mod kafka;
 #[cfg(feature = "logging")]
 pub mod logging;
+#[cfg(feature = "memprof")]
+pub mod memprof;

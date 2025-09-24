@@ -20,9 +20,12 @@ base64 = { version = "0.22.1", optional = true }
 diesel = { version = "2.2.10", features = ["postgres"], optional = true }
 diesel-async = { version = "0.6.1", features = ["deadpool", "postgres"], optional = true }
 url = { version = "2.5.4", optional = true }
+axum = { version = "0.8.4", optional = true }
+jemalloc_pprof = { version = "0.8.1", features = ["flamegraph"], optional = true }
 
 [features]
 default = ["logging"]
 logging = ["tracing-loki", "tracing-subscriber", "tokio"]
 kafka = ["rdkafka", "tokio-util", "serde", "serde_json", "tokio", "tracing", "uuid", "async-trait", "thiserror"]
 io = ["chromiumoxide", "base64", "diesel", "diesel-async", "url", "thiserror", "serde", "serde_json", "kafka"]
+memprof = ["axum", "jemalloc_pprof", "tokio", "tokio-util"]
