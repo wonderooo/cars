@@ -13,7 +13,13 @@ futures = "0.3.31"
 base64 = "0.22.1"
 async-trait = "0.1.88"
 
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = { version = "0.6", features = ["profiling", "unprefixed_malloc_on_supported_platforms"] }
+
 [dev-dependencies]
 wiremock = "0.6.4"
 testcontainers-modules = { version = "0.12.1", features = ["kafka"] }
 uuid = { version = "1.17.0", features = ["v4"] }
+
+[features]
+prof = ["common/memprof"]

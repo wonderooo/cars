@@ -1,11 +1,11 @@
 use crate::copart::sink::{MsgIn, MsgOut};
 use async_trait::async_trait;
 use common::kafka::{KafkaError, ReceiveHandle, SendHandle, SendMsg, ToTopic};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::error;
 
 pub struct CopartSinkTxKafkaAdapter {
-    pub cmd_sender: UnboundedSender<MsgIn>,
+    pub cmd_sender: Sender<MsgIn>,
 }
 
 #[async_trait]
@@ -17,6 +17,7 @@ impl ReceiveHandle for CopartSinkTxKafkaAdapter {
             Ok(msg) => self
                 .cmd_sender
                 .send(msg)
+                .await
                 .expect("tokio mpsc channel - cmd receiver is gone"),
             Err(e) => error!("kafka receive failed: `{e}`"),
         };
@@ -24,7 +25,7 @@ impl ReceiveHandle for CopartSinkTxKafkaAdapter {
 }
 
 pub struct CopartSinkRxKafkaAdapter {
-    pub response_receiver: UnboundedReceiver<MsgOut>,
+    pub response_receiver: Receiver<MsgOut>,
 }
 
 #[async_trait]
@@ -55,7 +56,7 @@ mod tests {
         let kafka_port = container.get_host_port_ipv4(apache::KAFKA_PORT).await?;
         let kafka_addr = format!("127.0.0.1:{kafka_port}");
 
-        let (cmd_sender, mut cmd_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (cmd_sender, mut cmd_receiver) = tokio::sync::mpsc::channel(32);
         let tx_adapter = CopartSinkTxKafkaAdapter { cmd_sender };
 
         KafkaAdmin::new(&kafka_addr)
@@ -90,17 +91,19 @@ mod tests {
         let kafka_port = container.get_host_port_ipv4(apache::KAFKA_PORT).await?;
         let kafka_addr = format!("127.0.0.1:{kafka_port}");
 
-        let (response_sender, response_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (response_sender, response_receiver) = tokio::sync::mpsc::channel(32);
         let rx_adapter = CopartSinkRxKafkaAdapter { response_receiver };
 
         KafkaAdmin::new(&kafka_addr)
             .create_topic("copart_response_lot_image_blobs")
             .await?;
         tokio::spawn(KafkaSender::new(&kafka_addr).run_on_blocking(rx_adapter));
-        response_sender.send(MsgOut::LotImageBlobs(Ok(LotImageBlobsResponse {
-            lot_number: 69,
-            response: LotImageBlobsVector(vec![]),
-        })))?;
+        response_sender
+            .send(MsgOut::LotImageBlobs(Ok(LotImageBlobsResponse {
+                lot_number: 69,
+                response: LotImageBlobsVector(vec![]),
+            })))
+            .await?;
 
         assert!(
             KafkaReceiver::new(

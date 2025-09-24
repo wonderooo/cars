@@ -78,12 +78,9 @@ impl CopartRequesterExt for CopartRequester {
                     drop(_permit);
 
                     LotImageBlobs {
-                        standard: standard
-                            .map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes)),
-                        thumbnail: thumbnail
-                            .map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes)),
-                        high_res: high_res
-                            .map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes)),
+                        standard: standard.map(|bytes| encode_to_string(bytes)),
+                        thumbnail: thumbnail.map(|bytes| encode_to_string(bytes)),
+                        high_res: high_res.map(|bytes| encode_to_string(bytes)),
                     }
                 })
                 .buffer_unordered(4)
@@ -94,6 +91,12 @@ impl CopartRequesterExt for CopartRequester {
 
         blobs
     }
+}
+
+fn encode_to_string(bytes: Bytes) -> String {
+    let mut buffer = String::with_capacity(bytes.len());
+    base64::engine::general_purpose::STANDARD.encode_string(bytes, &mut buffer);
+    buffer
 }
 
 #[cfg(test)]

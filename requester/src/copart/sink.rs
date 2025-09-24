@@ -2,27 +2,28 @@ use crate::copart::client::CopartRequesterExt;
 use common::io::copart::{CopartResponse, LotImageBlobsResponse, LotImagesResponse};
 use common::io::error::GeneralError;
 use std::sync::Arc;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use tokio::sync::Notify;
+use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::{Notify, Semaphore};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 pub type MsgIn = CopartResponse;
 pub type MsgOut = CopartResponse;
 
 pub struct ExternalSignaling {
-    pub cmd_sender: UnboundedSender<MsgIn>,
-    pub response_receiver: UnboundedReceiver<MsgOut>,
+    pub cmd_sender: Sender<MsgIn>,
+    pub response_receiver: Receiver<MsgOut>,
 }
 
 pub struct CopartRequesterSink<R: CopartRequesterExt> {
-    cmd_receiver: UnboundedReceiver<MsgIn>,
+    cmd_receiver: Receiver<MsgIn>,
     msg_handler: Arc<SingleMsgHandler<R>>,
+    usage_permits: Arc<Semaphore>,
 }
 
 struct SingleMsgHandler<R: CopartRequesterExt> {
     requester: R,
-    response_sender: UnboundedSender<MsgOut>,
+    response_sender: Sender<MsgOut>,
 }
 
 impl<R: CopartRequesterExt> SingleMsgHandler<R> {
@@ -39,12 +40,13 @@ impl<R: CopartRequesterExt> SingleMsgHandler<R> {
         match incoming_msg {
             Ok(images) => {
                 let blobs = self.requester.download_images(images.response).await;
-                let _ =
-                    self.response_sender
-                        .send(MsgOut::LotImageBlobs(Ok(LotImageBlobsResponse {
-                            lot_number: images.lot_number,
-                            response: blobs,
-                        })));
+                let _ = self
+                    .response_sender
+                    .send(MsgOut::LotImageBlobs(Ok(LotImageBlobsResponse {
+                        lot_number: images.lot_number,
+                        response: blobs,
+                    })))
+                    .await;
             }
             Err(e) => error!(producer_error = ?e, "lot images response is an error"),
         }
@@ -56,8 +58,8 @@ where
     R: CopartRequesterExt + Send + Sync + 'static,
 {
     pub fn new(requester: R) -> (Self, ExternalSignaling) {
-        let (cmd_sender, cmd_receiver) = tokio::sync::mpsc::unbounded_channel();
-        let (response_sender, response_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (cmd_sender, cmd_receiver) = tokio::sync::mpsc::channel(32);
+        let (response_sender, response_receiver) = tokio::sync::mpsc::channel(32);
         let external_signaling = ExternalSignaling {
             cmd_sender,
             response_receiver,
@@ -69,6 +71,7 @@ where
         let sink = Self {
             msg_handler,
             cmd_receiver,
+            usage_permits: Arc::new(Semaphore::new(32)),
         };
         (sink, external_signaling)
     }
@@ -88,12 +91,22 @@ where
         done
     }
 
+    #[instrument(skip(self))]
     pub async fn run_blocking(mut self) {
         while let Some(msg) = self.cmd_receiver.recv().await {
+            debug!(incoming_msg = ?msg, "spawning handler for incoming message");
+            let _permit = unsafe {
+                self.usage_permits
+                    .clone()
+                    .acquire_owned()
+                    .await
+                    .unwrap_unchecked()
+            };
             tokio::spawn({
                 let handler = Arc::clone(&self.msg_handler);
                 async move {
                     handler.handle_message(msg).await;
+                    drop(_permit);
                 }
             });
         }
@@ -129,10 +142,12 @@ mod tests {
         tokio::spawn(sink.run_blocking());
 
         for _ in 0..16 {
-            sig.cmd_sender.send(MsgIn::LotImages(Ok(LotImagesResponse {
-                lot_number: 69,
-                response: LotImagesVector(vec![]),
-            })))?;
+            sig.cmd_sender
+                .send(MsgIn::LotImages(Ok(LotImagesResponse {
+                    lot_number: 69,
+                    response: LotImagesVector(vec![]),
+                })))
+                .await?;
         }
 
         let mut responses = vec![];
