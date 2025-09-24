@@ -1,7 +1,7 @@
 /// Represents response for lot vehicles on the whole page
 pub mod lot_search {
     use crate::impl_display_and_debug;
-    use common::io::copart::LotVehicle;
+    use common::io::copart::{LotVehicle, LotVehicleVector};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
     use std::fmt::{Debug, Formatter};
@@ -60,7 +60,7 @@ pub mod lot_search {
         pub member_vehicle_type: String,
         pub odometer_uom: Option<String>,
         pub show_claim_form: bool,
-        pub lot_plug_acv: f64,
+        pub lot_plug_acv: Option<f64>,
         pub ready_for_replay_flag: bool,
         pub inspected_lot: bool,
         pub car_fax_report_available: bool,
@@ -74,7 +74,7 @@ pub mod lot_search {
         pub lm: String,
         pub mmod: Option<String>,
         pub lcy: i32,
-        pub fv: String,
+        pub fv: Option<String>,
         pub la: f64,
         pub rc: f64,
         pub obc: Option<String>,
@@ -95,18 +95,18 @@ pub mod lot_search {
         pub bndc: String,
         pub bnp: f64,
         pub sbf: bool,
-        pub ts: String,
-        pub stt: String,
-        pub td: String,
-        pub tgc: String,
-        pub tgd: String,
+        pub ts: Option<String>,
+        pub stt: Option<String>,
+        pub td: Option<String>,
+        pub tgc: Option<String>,
+        pub tgd: Option<String>,
         pub dd: String,
-        pub tims: String,
+        pub tims: Option<String>,
         pub lic: Vec<String>,
         pub gr: String,
         pub dtc: String,
         pub al: Option<String>,
-        pub adt: String,
+        pub adt: Option<String>,
         pub ynumb: i32,
         pub phynumb: i32,
         pub bf: bool,
@@ -125,7 +125,7 @@ pub mod lot_search {
         pub lcd: Option<String>,
         pub clr: String,
         pub ft: Option<String>,
-        pub hk: String,
+        pub hk: Option<String>,
         pub drv: Option<String>,
         pub ess: String,
         pub lsts: String,
@@ -148,14 +148,30 @@ pub mod lot_search {
         pub csc: String,
         pub mlf: bool,
         pub fcd: bool,
-        pub slgc: String,
+        pub slgc: Option<String>,
         pub slan: Option<String>,
         pub cfx: bool,
         pub hcfx: bool,
         pub hide_lane_item: bool,
         pub hide_grid_row: bool,
-        pub is_pwlot: Option<bool>,
+        #[serde(rename = "isPWlot")]
+        pub is_pwlot: bool,
         pub lspa: f64,
+        pub other_goods_lot: bool,
+        pub lat: f64,
+        pub site_codes: Vec<String>,
+        pub zip: String,
+        pub long: f64,
+        pub loc_city: String,
+        pub lh: Option<String>,
+        pub mtrim: Option<String>,
+        pub tsmn: Option<String>,
+        pub ad: Option<i64>,
+        pub sn: Option<String>,
+        pub gou: Option<String>,
+        pub scn: Option<String>,
+        pub scl: Option<String>,
+        pub smd: Option<serde_json::Value>,
     }
 
     #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, PartialOrd)]
@@ -193,18 +209,20 @@ pub mod lot_search {
         write!(f, "}}")
     });
 
-    impl Into<Vec<LotVehicle>> for ApiResponse {
-        fn into(self) -> Vec<LotVehicle> {
-            self.data
-                .results
-                .content
-                .into_iter()
-                .map(|l| LotVehicle {
-                    lot_number: l.ln as i32,
-                    make: l.mkn,
-                    year: l.lcy,
-                })
-                .collect()
+    impl Into<LotVehicleVector> for ApiResponse {
+        fn into(self) -> LotVehicleVector {
+            LotVehicleVector(
+                self.data
+                    .results
+                    .content
+                    .into_iter()
+                    .map(|l| LotVehicle {
+                        lot_number: l.ln as i32,
+                        make: l.mkn,
+                        year: l.lcy,
+                    })
+                    .collect(),
+            )
         }
     }
 }
