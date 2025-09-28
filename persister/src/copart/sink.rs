@@ -1,26 +1,28 @@
+use crate::bucket::models::NewLotImages;
 use crate::copart::CopartPersisterExt;
-use crate::orm::models::copart::NewLotImages;
 use common::io::copart::{CopartCmd, CopartResponse, LotImageBlobsResponse, LotSearchResponse};
 use common::io::error::GeneralError;
+use futures::StreamExt;
 use std::sync::Arc;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use tokio::sync::Notify;
+use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::{Notify, Semaphore};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument, warn};
 
 pub struct ExternalSignaling {
-    pub cmd_sender: UnboundedSender<CopartResponse>,
-    pub response_receiver: UnboundedReceiver<CopartCmd>,
+    pub cmd_sender: Sender<CopartResponse>,
+    pub response_receiver: Receiver<CopartCmd>,
 }
 
 pub struct CopartPersisterSink<P: CopartPersisterExt> {
-    cmd_receiver: UnboundedReceiver<CopartResponse>,
+    cmd_receiver: Receiver<CopartResponse>,
     msg_handler: Arc<SingleMsgHandler<P>>,
+    usage_permit: Arc<Semaphore>,
 }
 
 struct SingleMsgHandler<P: CopartPersisterExt> {
     persister: P,
-    response_sender: UnboundedSender<CopartCmd>,
+    response_sender: Sender<CopartCmd>,
 }
 
 impl<P: CopartPersisterExt> SingleMsgHandler<P> {
@@ -45,9 +47,13 @@ impl<P: CopartPersisterExt> SingleMsgHandler<P> {
                     .save_new_lot_vehicles(lsr.response.into())
                     .await
                 {
-                    Ok(lns) => lns.into_iter().for_each(|ln| {
-                        let _ = self.response_sender.send(CopartCmd::LotImages(ln));
-                    }),
+                    Ok(lns) => {
+                        futures::stream::iter(lns)
+                            .for_each(|ln| async move {
+                                let _ = self.response_sender.send(CopartCmd::LotImages(ln)).await;
+                            })
+                            .await
+                    }
                     Err(e) => error!(persister_error = ?e, "save new lot vehicles failed"),
                 }
             }
@@ -80,8 +86,8 @@ where
     P: CopartPersisterExt + Send + Sync + 'static,
 {
     pub fn new(persister: P) -> (Self, ExternalSignaling) {
-        let (cmd_sender, cmd_receiver) = tokio::sync::mpsc::unbounded_channel();
-        let (response_sender, response_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (cmd_sender, cmd_receiver) = tokio::sync::mpsc::channel(32);
+        let (response_sender, response_receiver) = tokio::sync::mpsc::channel(32);
         let external_signaling = ExternalSignaling {
             cmd_sender,
             response_receiver,
@@ -93,6 +99,7 @@ where
         let sink = Self {
             msg_handler,
             cmd_receiver,
+            usage_permit: Arc::new(Semaphore::new(32)),
         };
         (sink, external_signaling)
     }
@@ -114,10 +121,19 @@ where
 
     pub async fn run_blocking(mut self) {
         while let Some(msg) = self.cmd_receiver.recv().await {
+            let _permit = unsafe {
+                self.usage_permit
+                    .clone()
+                    .acquire_owned()
+                    .await
+                    .unwrap_unchecked()
+            };
+
             tokio::spawn({
                 let handler = Arc::clone(&self.msg_handler);
                 async move {
                     handler.handle_message(msg).await;
+                    drop(_permit);
                 }
             });
         }

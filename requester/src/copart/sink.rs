@@ -132,6 +132,11 @@ mod tests {
                 standard: None,
                 high_res: None,
                 thumbnail: None,
+                standard_url: None,
+                high_res_url: None,
+                thumbnail_url: None,
+                sequence_number: 1,
+                image_type: "jpg".to_string(),
             }])
         }
     }

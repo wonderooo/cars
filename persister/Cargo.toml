@@ -12,6 +12,11 @@ diesel = { version = "2.2.10", features = ["postgres"] }
 diesel-async = { version = "0.6.1", features = ["deadpool", "postgres"] }
 dotenvy = "0.15.7"
 async-trait = "0.1.88"
+futures = "0.3.31"
+aws-sdk-s3 = { version = "1.106.0", features = ["behavior-version-latest"] }
+base64 = "0.22.1"
+mime_guess = "2.0.5"
+serde = { version = "1.0.219", features = ["derive"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.6"

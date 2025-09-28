@@ -8,11 +8,13 @@ pub mod schema;
 
 pub type PgPool = Pool<AsyncPgConnection>;
 
-pub static PG_POOL: LazyLock<PgPool> = LazyLock::new(|| {
+pub fn init_pg_pool() -> PgPool {
     dotenvy::from_filename("persister/.env").ok();
 
     let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(
         std::env::var("DATABASE_URL").expect("database url not set"),
     );
     Pool::builder(config).build().expect("build pool")
-});
+}
+
+pub static PG_POOL: LazyLock<PgPool> = LazyLock::new(|| init_pg_pool());

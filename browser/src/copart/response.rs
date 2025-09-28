@@ -287,6 +287,8 @@ pub mod lot_images {
                     thumbnail_url: i.thumbnail_url,
                     full_url: i.full_url,
                     high_res_url: i.high_res_url,
+                    sequence_number: i.image_seq_number,
+                    image_type: i.image_type_enum,
                 })
                 .collect()
         }

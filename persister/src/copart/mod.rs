@@ -1,16 +1,21 @@
 pub mod adapter;
 pub mod sink;
 
-use crate::orm::models::copart::{NewLotImages, NewLotVehicles};
+use crate::bucket::models::NewLotImages;
+use crate::bucket::MINIO_CLIENT;
+use crate::orm::models::copart::NewLotVehicles;
 use crate::orm::schema::lot_vehicle::dsl::lot_vehicle;
 use crate::orm::schema::lot_vehicle::lot_number;
 use crate::orm::PG_POOL;
 use async_trait::async_trait;
-use common::io::copart::LotNumber;
+use aws_sdk_s3::primitives::ByteStream;
+use base64::Engine;
+use common::io::copart::{Base64Blob, LotNumber};
 use common::io::error::GeneralError;
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, RunQueryDsl};
+use futures::StreamExt;
 use tracing::{debug, instrument};
 
 #[async_trait]
@@ -87,18 +92,53 @@ impl CopartPersisterExt for CopartPersister {
         &self,
         new_lot_images: NewLotImages,
     ) -> Result<Vec<LotNumber>, GeneralError> {
-        let mut conn = PG_POOL.get().await?;
+        let put_image = async |key: &String, blob: &Base64Blob, mime_type: &String| {
+            MINIO_CLIENT
+                .clone()
+                .put_object()
+                .bucket("lot-images")
+                .content_type(mime_type)
+                .key(key)
+                .body(ByteStream::from(
+                    base64::engine::general_purpose::STANDARD
+                        .decode(blob)
+                        .expect("failed to decode blob"),
+                ))
+                .send()
+                .await
+                .expect("failed to put object");
+        };
 
+        futures::stream::iter(&new_lot_images.0)
+            .for_each_concurrent(16, |img| async move {
+                tokio::join!(
+                    async {
+                        if let Some(ref high_res) = img.high_res {
+                            put_image(&high_res.bucket_key, &high_res.blob, &high_res.mime_type)
+                                .await
+                        }
+                    },
+                    async {
+                        if let Some(ref thumb) = img.thumbnail {
+                            put_image(&thumb.bucket_key, &thumb.blob, &thumb.mime_type).await
+                        }
+                    },
+                    async {
+                        if let Some(ref std) = img.standard {
+                            put_image(&std.bucket_key, &std.blob, &std.mime_type).await
+                        }
+                    }
+                );
+            })
+            .await;
+
+        let mut conn = PG_POOL.get().await?;
+        let new_lot_images: crate::orm::models::copart::NewLotImages = new_lot_images.into();
         diesel::insert_into(crate::orm::schema::lot_image::table)
             .values(&new_lot_images.0)
             .execute(&mut conn)
             .await?;
 
-        let lns = new_lot_images
-            .0
-            .into_iter()
-            .map(|i| i.lot_vehicle_number)
-            .collect::<Vec<_>>();
-        Ok(lns)
+        Ok(vec![])
     }
 }

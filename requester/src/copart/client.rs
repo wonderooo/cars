@@ -53,8 +53,8 @@ impl CopartRequesterExt for CopartRequester {
             .collect::<Vec<String>>();
         info!(sample_lot_images = ?sample_cmds, "sample lot images");
 
-        let option_download_content = async |url: Option<String>| match url {
-            Some(url) => match self.download_content(&url).await {
+        let option_download_content = async |url: &Option<String>| match url {
+            Some(url) => match self.download_content(url).await {
                 Ok(b) => Some(b),
                 Err(e) => {
                     error!(download_error = ?e, "download image blobs failed");
@@ -71,9 +71,9 @@ impl CopartRequesterExt for CopartRequester {
                     // thus maximum socket usage is 3 * 4 * 64 = 768
                     let _permit = unsafe { self.usage_permit.acquire().await.unwrap_unchecked() };
                     let (standard, thumbnail, high_res) = tokio::join!(
-                        option_download_content(img.full_url),
-                        option_download_content(img.thumbnail_url),
-                        option_download_content(img.high_res_url)
+                        option_download_content(&img.full_url),
+                        option_download_content(&img.thumbnail_url),
+                        option_download_content(&img.high_res_url)
                     );
                     drop(_permit);
 
@@ -81,6 +81,11 @@ impl CopartRequesterExt for CopartRequester {
                         standard: standard.map(|bytes| encode_to_string(bytes)),
                         thumbnail: thumbnail.map(|bytes| encode_to_string(bytes)),
                         high_res: high_res.map(|bytes| encode_to_string(bytes)),
+                        standard_url: img.full_url,
+                        thumbnail_url: img.thumbnail_url,
+                        high_res_url: img.high_res_url,
+                        sequence_number: img.sequence_number,
+                        image_type: img.image_type,
                     }
                 })
                 .buffer_unordered(4)
@@ -134,6 +139,8 @@ mod tests {
             thumbnail_url: Some(random_mock_url(&mock_srv)),
             full_url: Some(random_mock_url(&mock_srv)),
             high_res_url: Some(random_mock_url(&mock_srv)),
+            sequence_number: 1,
+            image_type: "jpg".to_string(),
         };
 
         let start_one_cmd = Instant::now();

@@ -178,6 +178,8 @@ pub mod copart {
         pub thumbnail_url: Option<String>,
         pub full_url: Option<String>,
         pub high_res_url: Option<String>,
+        pub sequence_number: i32,
+        pub image_type: String,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -188,6 +190,11 @@ pub mod copart {
         pub standard: Option<Base64Blob>,
         pub high_res: Option<Base64Blob>,
         pub thumbnail: Option<Base64Blob>,
+        pub standard_url: Option<String>,
+        pub high_res_url: Option<String>,
+        pub thumbnail_url: Option<String>,
+        pub sequence_number: i32,
+        pub image_type: String,
     }
 
     impl Debug for LotVehicleVector {

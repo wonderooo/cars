@@ -79,6 +79,20 @@ services:
       - '5432:5432'
     networks:
       - net
+  minio:
+    image: bitnami/minio
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    environment:
+      - MINIO_ROOT_USER=root
+      - MINIO_ROOT_PASSWORD=secret123
+      - MINIO_DEFAULT_BUCKETS=lot-images
+      - MINIO_BROWSER=on
+    volumes:
+      - /cars/images:/data
+    networks:
+      - net
 
 networks:
   net:

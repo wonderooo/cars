@@ -3,9 +3,19 @@
 diesel::table! {
     lot_image (id) {
         id -> Int4,
-        blob_standard -> Nullable<Text>,
-        blob_thumbnail -> Nullable<Text>,
-        blob_high_res -> Nullable<Text>,
+        standard_bucket_key -> Nullable<Varchar>,
+        standard_mime_type -> Nullable<Varchar>,
+        standard_source_url -> Nullable<Varchar>,
+        thumbnail_bucket_key -> Nullable<Varchar>,
+        thumbnail_mime_type -> Nullable<Varchar>,
+        thumbnail_source_url -> Nullable<Varchar>,
+        high_res_bucket_key -> Nullable<Varchar>,
+        high_res_mime_type -> Nullable<Varchar>,
+        high_res_source_url -> Nullable<Varchar>,
+        sequence_number -> Int4,
+        image_type -> Varchar,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
         lot_vehicle_number -> Int4,
     }
 }
