@@ -22,6 +22,9 @@ diesel-async = { version = "0.6.1", features = ["deadpool", "postgres"], optiona
 url = { version = "2.5.4", optional = true }
 axum = { version = "0.8.4", optional = true }
 jemalloc_pprof = { version = "0.8.1", features = ["flamegraph"], optional = true }
+dotenvy = { version = "0.15.7", optional = true }
+mime_guess = { version = "2.0.5", optional = true }
+aws-sdk-s3 = { version = "1.106.0", features = ["behavior-version-latest"], optional = true }
 
 [features]
 default = ["logging"]
@@ -29,3 +32,5 @@ logging = ["tracing-loki", "tracing-subscriber", "tokio"]
 kafka = ["rdkafka", "tokio-util", "serde", "serde_json", "tokio", "tracing", "uuid", "async-trait", "thiserror"]
 io = ["chromiumoxide", "base64", "diesel", "diesel-async", "url", "thiserror", "serde", "serde_json", "kafka"]
 memprof = ["axum", "jemalloc_pprof", "tokio", "tokio-util"]
+persistence = ["diesel", "diesel-async", "dotenvy"]
+bucket = ["mime_guess", "aws-sdk-s3"]

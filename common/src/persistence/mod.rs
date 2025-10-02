@@ -9,7 +9,7 @@ pub mod schema;
 pub type PgPool = Pool<AsyncPgConnection>;
 
 pub fn init_pg_pool() -> PgPool {
-    dotenvy::from_filename("persister/.env").ok();
+    dotenvy::from_filename("common/src/persistence/.env").ok();
 
     let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(
         std::env::var("DATABASE_URL").expect("database url not set"),

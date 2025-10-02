@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-persister = { path = "../persister", optional = true }
+common = { path = "../common", optional = true, features = ["persistence"] }
 diesel = { version = "2.2.10", features = ["postgres"], optional = true }
 diesel-async = { version = "0.6.1", features = ["deadpool", "postgres"], optional = true }
 serde = { version = "1.0.219" }
@@ -30,7 +30,7 @@ ssr = [
     "dep:axum",
     "dep:tokio",
     "dep:leptos_axum",
-    "dep:persister",
+    "dep:common",
     "dep:diesel",
     "dep:diesel-async",
     "leptos/ssr",

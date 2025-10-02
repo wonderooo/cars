@@ -1,17 +1,17 @@
 pub mod adapter;
 pub mod sink;
 
-use crate::bucket::models::NewLotImages;
-use crate::bucket::MINIO_CLIENT;
-use crate::orm::models::copart::NewLotVehicles;
-use crate::orm::schema::lot_vehicle::dsl::lot_vehicle;
-use crate::orm::schema::lot_vehicle::lot_number;
-use crate::orm::PG_POOL;
 use async_trait::async_trait;
 use aws_sdk_s3::primitives::ByteStream;
 use base64::Engine;
+use common::bucket::models::NewLotImages;
+use common::bucket::MINIO_CLIENT;
 use common::io::copart::{Base64Blob, LotNumber};
 use common::io::error::GeneralError;
+use common::persistence::models::copart::NewLotVehicles;
+use common::persistence::schema::lot_vehicle::dsl::lot_vehicle;
+use common::persistence::schema::lot_vehicle::lot_number;
+use common::persistence::PG_POOL;
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, RunQueryDsl};
@@ -71,7 +71,7 @@ impl CopartPersisterExt for CopartPersister {
                     "unique `{}` copart new lot vehicles",
                     unique_lot_vehicles.len()
                 );
-                let k = diesel::insert_into(crate::orm::schema::lot_vehicle::table)
+                let k = diesel::insert_into(common::persistence::schema::lot_vehicle::table)
                     .values(&unique_lot_vehicles)
                     .on_conflict_do_nothing() // Discard lot vehicles with already existing lot numbers
                     .execute(&mut conn)
@@ -133,8 +133,9 @@ impl CopartPersisterExt for CopartPersister {
             .await;
 
         let mut conn = PG_POOL.get().await?;
-        let new_lot_images: crate::orm::models::copart::NewLotImages = new_lot_images.into();
-        diesel::insert_into(crate::orm::schema::lot_image::table)
+        let new_lot_images: common::persistence::models::copart::NewLotImages =
+            new_lot_images.into();
+        diesel::insert_into(common::persistence::schema::lot_image::table)
             .values(&new_lot_images.0)
             .execute(&mut conn)
             .await?;

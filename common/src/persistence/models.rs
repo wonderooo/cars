@@ -1,12 +1,11 @@
 pub mod copart {
     use crate::bucket;
-    use common::io::copart::LotVehicleVector;
+    use crate::io::copart::LotVehicleVector;
     use diesel::prelude::*;
-    use serde::Serialize;
     use std::time::SystemTime;
 
-    #[derive(Queryable, Selectable, Identifiable, Serialize)]
-    #[diesel(table_name = crate::orm::schema::lot_vehicle)]
+    #[derive(Queryable, Selectable, Identifiable)]
+    #[diesel(table_name = crate::persistence::schema::lot_vehicle)]
     #[diesel(check_for_backend(diesel::pg::Pg))]
     pub struct LotVehicle {
         pub id: i32,
@@ -16,7 +15,7 @@ pub mod copart {
     }
 
     #[derive(Insertable)]
-    #[diesel(table_name = crate::orm::schema::lot_vehicle)]
+    #[diesel(table_name = crate::persistence::schema::lot_vehicle)]
     pub struct NewLotVehicle {
         pub lot_number: i32,
         pub make: String,
@@ -41,8 +40,8 @@ pub mod copart {
         }
     }
 
-    #[derive(Selectable, Queryable, Associations, Identifiable, Serialize, Debug)]
-    #[diesel(table_name = crate::orm::schema::lot_image)]
+    #[derive(Selectable, Queryable, Associations, Identifiable)]
+    #[diesel(table_name = crate::persistence::schema::lot_image)]
     #[diesel(belongs_to(LotVehicle, foreign_key = lot_vehicle_number))]
     #[diesel(check_for_backend(diesel::pg::Pg))]
     pub struct LotImage {
@@ -70,7 +69,7 @@ pub mod copart {
     }
 
     #[derive(Insertable)]
-    #[diesel(table_name = crate::orm::schema::lot_image)]
+    #[diesel(table_name = crate::persistence::schema::lot_image)]
     pub struct NewLotImage {
         pub standard_bucket_key: Option<String>,
         pub standard_mime_type: Option<String>,
@@ -92,6 +91,7 @@ pub mod copart {
 
     pub struct NewLotImages(pub Vec<NewLotImage>);
 
+    #[cfg(feature = "bucket")]
     impl From<bucket::models::NewLotImages> for NewLotImages {
         fn from(value: bucket::models::NewLotImages) -> Self {
             Self(

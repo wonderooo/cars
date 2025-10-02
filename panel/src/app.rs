@@ -58,13 +58,14 @@ pub struct LotVehicleDto {
 
 #[server]
 pub async fn query_db() -> Result<Vec<LotVehicleDto>, ServerFnError> {
+    use common::persistence::models::copart::LotVehicle;
+    use common::persistence::schema::lot_vehicle::dsl::lot_vehicle;
+    use common::persistence::PG_POOL;
     use diesel::query_dsl::QueryDsl;
     use diesel::SelectableHelper;
     use diesel_async::RunQueryDsl;
-    use persister::orm::models::copart::LotVehicle;
-    use persister::orm::schema::lot_vehicle::dsl::lot_vehicle;
 
-    let mut conn = persister::orm::PG_POOL.get().await?;
+    let mut conn = PG_POOL.get().await?;
     Ok(lot_vehicle
         .select(LotVehicle::as_select())
         .load(&mut conn)

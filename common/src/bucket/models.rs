@@ -1,4 +1,4 @@
-use common::io::copart::{Base64Blob, LotImageBlobsResponse};
+use crate::io::copart::{Base64Blob, LotImageBlobsResponse};
 use mime_guess::MimeGuess;
 
 pub struct ImageInfo {

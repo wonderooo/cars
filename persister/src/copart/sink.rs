@@ -1,5 +1,5 @@
-use crate::bucket::models::NewLotImages;
 use crate::copart::CopartPersisterExt;
+use common::bucket::models::NewLotImages;
 use common::io::copart::{CopartCmd, CopartResponse, LotImageBlobsResponse, LotSearchResponse};
 use common::io::error::GeneralError;
 use futures::StreamExt;

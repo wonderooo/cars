@@ -1,3 +1,5 @@
+#[cfg(feature = "bucket")]
+pub mod bucket;
 #[cfg(feature = "io")]
 pub mod io;
 #[cfg(feature = "kafka")]
@@ -6,3 +8,5 @@ pub mod kafka;
 pub mod logging;
 #[cfg(feature = "memprof")]
 pub mod memprof;
+#[cfg(feature = "persistence")]
+pub mod persistence;

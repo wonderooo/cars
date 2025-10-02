@@ -1179,12 +1179,15 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "aws-sdk-s3",
  "axum",
  "base64 0.22.1",
  "chromiumoxide",
  "diesel",
  "diesel-async",
+ "dotenvy",
  "jemalloc_pprof",
+ "mime_guess",
  "rdkafka",
  "serde",
  "serde_json",
@@ -3450,6 +3453,7 @@ name = "panel"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "common",
  "console_error_panic_hook",
  "diesel",
  "diesel-async",
@@ -3457,7 +3461,6 @@ dependencies = [
  "leptos_axum",
  "leptos_meta",
  "leptos_router",
- "persister",
  "serde",
  "tokio",
  "wasm-bindgen",
@@ -3545,10 +3548,7 @@ dependencies = [
  "common",
  "diesel",
  "diesel-async",
- "dotenvy",
  "futures",
- "mime_guess",
- "serde",
  "tikv-jemallocator",
  "tokio",
  "tokio-util",
