@@ -2,7 +2,6 @@ pub mod adapter;
 pub mod sink;
 
 use async_trait::async_trait;
-use aws_sdk_s3::primitives::ByteStream;
 use base64::Engine;
 use common::bucket::models::NewLotImages;
 use common::bucket::MINIO_CLIENT;
@@ -95,15 +94,14 @@ impl CopartPersisterExt for CopartPersister {
         let put_image = async |key: &String, blob: &Base64Blob, mime_type: &String| {
             MINIO_CLIENT
                 .clone()
-                .put_object()
-                .bucket("lot-images")
-                .content_type(mime_type)
-                .key(key)
-                .body(ByteStream::from(
+                .put_object_content(
+                    "lot-images",
+                    key,
                     base64::engine::general_purpose::STANDARD
                         .decode(blob)
                         .expect("failed to decode blob"),
-                ))
+                )
+                .content_type(mime_type.to_owned())
                 .send()
                 .await
                 .expect("failed to put object");

@@ -1,4 +1,4 @@
-use common::kafka::{KafkaAdmin, KafkaReceiver, KafkaSender};
+use common::kafka::{KafkaReceiver, KafkaSender};
 use common::logging::setup_logging;
 use requester::copart::adapter::{CopartSinkRxKafkaAdapter, CopartSinkTxKafkaAdapter};
 use requester::copart::client::CopartRequester;
@@ -28,12 +28,6 @@ async fn main() {
 
     let (copart_sink, copart_sig) = CopartRequesterSink::new(CopartRequester::new());
     let copart_sink_done = copart_sink.run(cancellation_token.clone());
-
-    let admin = KafkaAdmin::new("localhost:9092");
-    admin
-        .recreate_topic("copart_response_lot_images")
-        .await
-        .expect("failed to recreate `copart_response_lot_images` topic");
 
     let rx_done = KafkaReceiver::new(
         "localhost:9092",

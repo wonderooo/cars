@@ -1,6 +1,6 @@
 use browser::copart::adapter::{CopartPoolRxKafkaAdapter, CopartPoolTxKafkaAdapter};
 use browser::copart::pool::CopartBrowserPool;
-use common::kafka::{KafkaAdmin, KafkaReceiver, KafkaSender};
+use common::kafka::{KafkaReceiver, KafkaSender};
 use common::logging::setup_logging;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
@@ -12,16 +12,6 @@ async fn main() {
 
     let ((cmd_sender, response_receiver), pool_done) =
         CopartBrowserPool::run(8, ([127, 0, 0, 1], 8100), cancellation_token.clone()).await;
-
-    let admin = KafkaAdmin::new("localhost:9092");
-    admin
-        .recreate_topic("copart_cmd_lot_search")
-        .await
-        .expect("failed to recreate `copart_cmd_lot_search` topic");
-    admin
-        .recreate_topic("copart_cmd_lot_images")
-        .await
-        .expect("failed to recreate `copart_cmd_lot_images` topic");
 
     let rx_done = KafkaReceiver::new(
         "localhost:9092",

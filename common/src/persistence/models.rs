@@ -91,7 +91,6 @@ pub mod copart {
 
     pub struct NewLotImages(pub Vec<NewLotImage>);
 
-    #[cfg(feature = "bucket")]
     impl From<bucket::models::NewLotImages> for NewLotImages {
         fn from(value: bucket::models::NewLotImages) -> Self {
             Self(
