@@ -54,6 +54,26 @@ impl KafkaAdmin {
         self.create_topic_with_options(topic, &HashMap::new()).await
     }
 
+    pub async fn create_absent_topic(&self, topic: &str) -> Result<bool, KafkaError> {
+        if !self.topic_exist(topic).await? {
+            self.create_topic(topic).await?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    pub async fn create_absent_topic_with_opts(
+        &self,
+        topic: &str,
+        opts: &HashMap<&str, &str>,
+    ) -> Result<bool, KafkaError> {
+        if !self.topic_exist(topic).await? {
+            self.create_topic_with_options(topic, opts).await?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
     pub async fn delete_topic(&self, topic: &str) -> Result<(), KafkaError> {
         let results = self
             .client
