@@ -4,15 +4,17 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-common = { path = "../common" }
-persister = { path = "../persister" }
+common = { path = "../common", features = ["persistence"] }
 tokio = { version = "1.45.1", features = ["full"] }
 tokio-util = "0.7.15"
-axum = "0.8.4"
+axum = { version = "0.8.4", features = ["macros"] }
 tracing = "0.1.41"
 diesel = { version = "2.2.10", features = ["postgres"] }
-diesel-async = { version = "0.6.1", features = ["deadpool", "postgres"] }
+diesel-async = { version = "0.7.3", features = ["deadpool", "postgres"] }
 serde = { version = "1.0.219", features = ["derive"] }
+thiserror = "2.0.12"
+utoipa = "5.4.0"
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.6"
