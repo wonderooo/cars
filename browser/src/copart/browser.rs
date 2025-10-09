@@ -14,14 +14,13 @@ use common::io::error::GeneralError;
 use futures::StreamExt;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use url::Url;
 
 pub type CmdSender = UnboundedSender<CopartCmd>;
@@ -47,9 +46,11 @@ pub trait ResponseGenerator {
 
 impl CopartBrowser {
     pub async fn run(
-        proxy_addr: impl Into<SocketAddr>,
+        host: String,
+        port: u16,
         cancellation_token: CancellationToken,
     ) -> Result<((CmdSender, ResponseReceiver), Arc<Notify>), GeneralError> {
+        debug!("running browser on proxy: {:?}:{:?}", host, port);
         let (browser, handler) = Browser::launch(
             BrowserConfig::builder()
                 .user_data_dir(PathBuf::from(format!(
@@ -57,7 +58,11 @@ impl CopartBrowser {
                     uuid::Uuid::new_v4().as_simple()
                 )))
                 .disable_cache()
-                .args(vec![format!("--proxy-server=http://{}", proxy_addr.into())])
+                .args(vec![
+                    format!("--proxy-server=http://{host}:{port}"),
+                    "--no-sandbox".to_string(),
+                    "--disable-dev-shm-usage".to_string(),
+                ])
                 .build()
                 .expect("browser failed to build"),
         )

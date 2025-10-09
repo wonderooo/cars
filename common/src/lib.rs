@@ -1,5 +1,7 @@
 #[cfg(feature = "bucket")]
 pub mod bucket;
+#[cfg(feature = "config")]
+pub mod config;
 #[cfg(feature = "io")]
 pub mod io;
 #[cfg(feature = "kafka")]

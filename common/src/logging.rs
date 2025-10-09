@@ -1,8 +1,8 @@
+use crate::config::CONFIG;
 use std::fs::File;
-use tracing_loki::url::Url;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
+use url::Url;
 
 pub fn setup_logging(module_name: &str) {
     let others_filter = format!("{module_name}=debug");
@@ -13,6 +13,7 @@ pub fn setup_logging(module_name: &str) {
         .with_level(true)
         .with_filter(EnvFilter::new(&others_filter));
 
+    std::fs::create_dir_all(module_name).expect("failed to create log directory");
     let file = File::create(format!("{module_name}/log.txt")).expect("failed to create log file");
     let file_log = tracing_subscriber::fmt::layer()
         .with_writer(file)
@@ -26,14 +27,16 @@ pub fn setup_logging(module_name: &str) {
         .expect("invalid loki label")
         .extra_field("pid", std::process::id().to_string())
         .expect("invalid loki field")
-        .build_url(Url::parse("http://localhost:3100").expect("invalid loki url"))
+        .build_url(Url::parse(&CONFIG.loki.url).expect("invalid loki url"))
         .expect("could not build loki");
 
-    tracing_subscriber::registry()
-        .with(stdout_log)
-        .with(file_log)
-        .with(loki.with_filter(EnvFilter::new(&others_filter)))
-        .init();
+    tracing::subscriber::set_global_default(
+        tracing_subscriber::registry()
+            .with(stdout_log)
+            .with(file_log)
+            .with(loki.with_filter(EnvFilter::new(&others_filter))),
+    )
+    .expect("failed to set global default");
 
     tokio::spawn(loki_task);
 }

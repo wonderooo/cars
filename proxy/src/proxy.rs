@@ -1,5 +1,6 @@
 use base64::Engine;
 use bytes::Bytes;
+use common::config::CONFIG;
 use http::StatusCode;
 use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
 use hyper::body::Incoming;
@@ -7,9 +8,7 @@ use hyper::service::service_fn;
 use hyper::upgrade::Upgraded;
 use hyper::{Method, Request, Response};
 use hyper_util::rt::TokioIo;
-use serde::Deserialize;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -17,52 +16,26 @@ use tracing::{debug, error, info};
 
 type ServerBuilder = hyper::server::conn::http1::Builder;
 
-pub struct ProxyChainServer {
-    pub config: ProxyChainConfig,
-}
+pub struct ProxyChainServer;
 
 #[allow(async_fn_in_trait)]
 pub trait ProxyChain {
     fn is_request_qualified(
         _req: &Request<Incoming>,
-        _filter_domains: Arc<Vec<String>>,
+        _filter_domains: Vec<String>,
     ) -> Result<(), Response<BoxBody<Bytes, hyper::Error>>> {
         Ok(())
     }
 
     async fn proxy(
         req: Request<Incoming>,
-        ext_info: Arc<StaticExtInfo>,
     ) -> Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error>;
 
-    async fn tunnel(
-        upgraded: Upgraded,
-        destination_addr: String,
-        proxy_info: Arc<StaticExtInfo>,
-    ) -> std::io::Result<()>;
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct ProxyChainConfig {
-    #[serde(rename = "external_info")]
-    pub ext_info: StaticExtInfo,
-    pub filter_domains: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct StaticExtInfo {
-    pub host: String,
-    pub port: u16,
-    pub username_base: String,
-    pub password: String,
+    async fn tunnel(upgraded: Upgraded, destination_addr: String) -> std::io::Result<()>;
 }
 
 impl ProxyChainServer {
-    pub fn new(config: ProxyChainConfig) -> Self {
-        Self { config }
-    }
-
-    pub async fn run(self, port: u16, notifier: Arc<tokio::sync::Notify>) {
+    pub fn run(self, port: u16, notifier: Arc<tokio::sync::Notify>) {
         tokio::spawn(async move {
             self.main_loop(port, notifier)
                 .await
@@ -75,21 +48,15 @@ impl ProxyChainServer {
         port: u16,
         notifier: Arc<tokio::sync::Notify>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let addr = SocketAddr::from(([127, 0, 0, 1], port));
+        let addr = SocketAddr::from(([0, 0, 0, 0], port));
 
         let listener = TcpListener::bind(addr).await?;
         notifier.notify_waiters();
         info!("Proxy chain listening on: {}", addr);
 
-        let ext_info_access = Arc::new(self.config.ext_info.clone());
-        let filter_domains_access = Arc::new(self.config.filter_domains.clone());
-
         loop {
             let (stream, _) = listener.accept().await?;
             let io = TokioIo::new(stream);
-
-            let ext_info_instance = Arc::clone(&ext_info_access);
-            let filter_domains_instance = Arc::clone(&filter_domains_access);
 
             tokio::task::spawn(async move {
                 if let Err(err) = ServerBuilder::new()
@@ -97,19 +64,15 @@ impl ProxyChainServer {
                     .title_case_headers(true)
                     .serve_connection(
                         io,
-                        service_fn(move |req| {
-                            let ext_info_instance = Arc::clone(&ext_info_instance);
-                            let filter_domains_instance = Arc::clone(&filter_domains_instance);
-
-                            async move {
-                                if let Err(e) =
-                                    Self::is_request_qualified(&req, filter_domains_instance)
-                                {
-                                    return Ok(e);
-                                }
-
-                                Self::proxy(req, ext_info_instance).await
+                        service_fn(move |req| async move {
+                            if let Err(e) = Self::is_request_qualified(
+                                &req,
+                                CONFIG.data_bright.allow_domains.clone(),
+                            ) {
+                                return Ok(e);
                             }
+
+                            Self::proxy(req).await
                         }),
                     )
                     .with_upgrades()
@@ -125,7 +88,7 @@ impl ProxyChainServer {
 impl ProxyChain for ProxyChainServer {
     fn is_request_qualified(
         req: &Request<Incoming>,
-        filter_domains: Arc<Vec<String>>,
+        filter_domains: Vec<String>,
     ) -> Result<(), Response<BoxBody<Bytes, hyper::Error>>> {
         // Only try to establish a proxy connection for requests with the CONNECT method
         // and defined destination host existing on a filter list
@@ -158,14 +121,13 @@ impl ProxyChain for ProxyChainServer {
 
     async fn proxy(
         req: Request<Incoming>,
-        ext_info: Arc<StaticExtInfo>,
     ) -> Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
         let destination_addr = req.uri().authority().expect("unreachable").to_string();
 
         tokio::task::spawn(async move {
             match hyper::upgrade::on(req).await {
                 Ok(upgraded) => {
-                    if let Err(e) = Self::tunnel(upgraded, destination_addr, ext_info).await {
+                    if let Err(e) = Self::tunnel(upgraded, destination_addr).await {
                         error!("server io error: {}", e);
                     }
                 }
@@ -176,18 +138,17 @@ impl ProxyChain for ProxyChainServer {
         Ok(Response::new(empty()))
     }
 
-    async fn tunnel(
-        upgraded: Upgraded,
-        addr: String,
-        proxy_info: Arc<StaticExtInfo>,
-    ) -> std::io::Result<()> {
-        let mut proxy_stream =
-            TcpStream::connect(format!("{}:{}", proxy_info.host, proxy_info.port)).await?;
+    async fn tunnel(upgraded: Upgraded, addr: String) -> std::io::Result<()> {
+        let mut proxy_stream = TcpStream::connect(format!(
+            "{}:{}",
+            CONFIG.data_bright.host, CONFIG.data_bright.port
+        ))
+        .await?;
         let mut upgraded = TokioIo::new(upgraded);
 
         let proxy_auth = base64::engine::general_purpose::STANDARD.encode(format!(
             "{}:{}",
-            proxy_info.username_base, proxy_info.password
+            CONFIG.data_bright.user, CONFIG.data_bright.password
         ));
         let proxy_auth_header_value = format!("Basic {}", proxy_auth);
 
@@ -210,15 +171,6 @@ impl ProxyChain for ProxyChainServer {
 
         tokio::io::copy_bidirectional(&mut upgraded, &mut proxy_stream).await?;
         Ok(())
-    }
-}
-
-impl ProxyChainConfig {
-    pub fn new(config_path: PathBuf) -> Self {
-        serde_yaml::from_str(
-            &std::fs::read_to_string(&config_path).expect("failed to open proxy chain config file"),
-        )
-        .expect("failed to parse proxy chain config file")
     }
 }
 

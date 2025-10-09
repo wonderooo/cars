@@ -1,5 +1,6 @@
 use browser::copart::adapter::{CopartPoolRxKafkaAdapter, CopartPoolTxKafkaAdapter};
 use browser::copart::pool::CopartBrowserPool;
+use common::config::CONFIG;
 use common::kafka::{KafkaReceiver, KafkaSender};
 use common::logging::setup_logging;
 use tokio_util::sync::CancellationToken;
@@ -8,13 +9,19 @@ use tracing::info;
 #[tokio::main]
 async fn main() {
     setup_logging("browser");
+    info!("starting app");
     let cancellation_token = CancellationToken::new();
 
-    let ((cmd_sender, response_receiver), pool_done) =
-        CopartBrowserPool::run(8, ([127, 0, 0, 1], 8100), cancellation_token.clone()).await;
+    let ((cmd_sender, response_receiver), pool_done) = CopartBrowserPool::run(
+        8,
+        CONFIG.proxy.host.to_owned(),
+        CONFIG.proxy.port,
+        cancellation_token.clone(),
+    )
+    .await;
 
     let rx_done = KafkaReceiver::new(
-        "localhost:9092",
+        CONFIG.kafka.url.to_owned(),
         "copart_cmd_lot_search_0",
         &["copart_cmd_lot_search", "copart_cmd_lot_images"],
     )
@@ -23,11 +30,12 @@ async fn main() {
         cancellation_token.clone(),
     );
 
-    let tx_done = KafkaSender::new("localhost:9092").run_on(
+    let tx_done = KafkaSender::new(CONFIG.kafka.url.to_owned()).run_on(
         CopartPoolRxKafkaAdapter { response_receiver },
         cancellation_token.clone(),
     );
 
+    info!("app started");
     tokio::signal::ctrl_c()
         .await
         .expect("failed to listen for ctrl c event");

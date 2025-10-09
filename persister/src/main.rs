@@ -9,6 +9,7 @@ use tracing::info;
 #[cfg(feature = "prof")]
 use common::memprof::MemProf;
 
+use common::config::CONFIG;
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
 
@@ -24,13 +25,14 @@ pub static malloc_conf: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0
 #[tokio::main]
 async fn main() {
     setup_logging("persister");
+    info!("starting app");
     let cancellation_token = CancellationToken::new();
 
     let (sink, sig) = CopartPersisterSink::new(CopartPersister);
     let sink_done = sink.run(cancellation_token.clone());
 
     let rx_done = KafkaReceiver::new(
-        "localhost:9092",
+        CONFIG.kafka.url.to_owned(),
         "consumer_group",
         &[
             "copart_response_lot_search",
@@ -43,7 +45,7 @@ async fn main() {
         },
         cancellation_token.clone(),
     );
-    let tx_done = KafkaSender::new("localhost:9092").run_on(
+    let tx_done = KafkaSender::new(CONFIG.kafka.url.to_owned()).run_on(
         CopartSinkRxKafkaAdapter {
             response_receiver: sig.response_receiver,
         },
@@ -53,6 +55,7 @@ async fn main() {
     #[cfg(feature = "prof")]
     let prof_done = MemProf::start("0.0.0.0:6970", cancellation_token.clone());
 
+    info!("app started");
     tokio::signal::ctrl_c()
         .await
         .expect("failed to listen for ctrl c event");

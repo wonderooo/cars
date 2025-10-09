@@ -14,5 +14,5 @@ url = "2.5.4"
 uuid = { version = "1.17.0", features = ["v4"] }
 chromiumoxide = "0.7.0"
 tracing = "0.1.41"
-common = { path = "../common", features = ["kafka", "io"] }
+common = { path = "../common", features = ["kafka", "io", "config"] }
 async-trait = "0.1.88"

@@ -5,7 +5,6 @@ use common::io::copart::{CopartCmd, CopartResponse};
 use common::io::error::GeneralError;
 use futures::StreamExt;
 use std::collections::VecDeque;
-use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Notify;
@@ -18,7 +17,8 @@ pub struct CopartBrowserPool;
 impl CopartBrowserPool {
     pub async fn run(
         num_workers: usize,
-        proxy_addr: impl Into<SocketAddr> + Clone,
+        host: String,
+        port: u16,
         cancellation_token: CancellationToken,
     ) -> ((CmdSender, ResponseReceiver), Arc<Notify>) {
         let (global_cmd_sender, global_cmd_receiver) = tokio::sync::mpsc::unbounded_channel();
@@ -28,7 +28,8 @@ impl CopartBrowserPool {
 
         let (cmd_senders, browsers_done, mut aborts) = Self::spawn_browsers(
             num_workers,
-            proxy_addr,
+            host,
+            port,
             cancellation_token,
             global_response_sender,
         )
@@ -43,14 +44,16 @@ impl CopartBrowserPool {
 
     async fn spawn_browsers(
         num_workers: usize,
-        proxy_addr: impl Into<SocketAddr> + Clone,
+        host: String,
+        port: u16,
         cancellation_token: CancellationToken,
         global_response_sender: ResponseSender,
     ) -> (VecDeque<CmdSender>, Vec<Arc<Notify>>, Vec<AbortHandle>) {
         futures::stream::iter(0..num_workers)
             .map(async |idx| {
                 let ((cmd_sender, response_receiver), done) = CopartBrowser::run(
-                    proxy_addr.clone(),
+                    host.clone(),
+                    port,
                     CancellationToken::clone(&cancellation_token),
                 )
                 .await

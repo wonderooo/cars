@@ -7,11 +7,13 @@ use tracing::info;
 #[tokio::main]
 async fn main() {
     setup_logging("sched");
+    info!("starting app");
 
     let cancellation_token = CancellationToken::new();
     let sched = Scheduler::new().with_task(Box::new(CopartLotSearchTask::default()));
     let done = sched.run(CancellationToken::clone(&cancellation_token));
 
+    info!("app started");
     tokio::signal::ctrl_c()
         .await
         .expect("failed to listen for ctrl c event");

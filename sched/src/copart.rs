@@ -1,5 +1,6 @@
 use crate::{minutes, Task};
 use async_trait::async_trait;
+use common::config::CONFIG;
 use common::io::copart::CopartCmd;
 use common::kafka::{KafkaSender, ToTopic};
 use tracing::{debug, error, info};
@@ -16,7 +17,7 @@ impl CopartLotSearchTask {
 
 impl Default for CopartLotSearchTask {
     fn default() -> Self {
-        Self::new(KafkaSender::new("localhost:9092"))
+        Self::new(KafkaSender::new(CONFIG.kafka.url.to_owned()))
     }
 }
 

@@ -1,3 +1,4 @@
+use crate::config::CONFIG;
 use diesel_async::pooled_connection::deadpool::Pool;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::AsyncPgConnection;
@@ -9,11 +10,14 @@ pub mod schema;
 pub type PgPool = Pool<AsyncPgConnection>;
 
 pub fn init_pg_pool() -> PgPool {
-    dotenvy::from_filename("common/src/persistence/.env").ok();
-
-    let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(
-        std::env::var("DATABASE_URL").expect("database url not set"),
+    let db_url = format!(
+        "postgres://{user}:{password}@{host}/{db_name}",
+        user = CONFIG.postgres.user,
+        password = CONFIG.postgres.password,
+        host = CONFIG.postgres.host,
+        db_name = CONFIG.postgres.db_name
     );
+    let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(db_url);
     Pool::builder(config).build().expect("build pool")
 }
 
