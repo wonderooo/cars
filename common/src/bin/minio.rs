@@ -13,23 +13,22 @@ async fn main() {
         .expect("failed to check bucket");
 
     if !bucket_exist_response.exists {
-        println!("bucket {} does not exists", BUCKET_NAME);
-
+        println!("bucket {} does not exist", BUCKET_NAME);
         MINIO_CLIENT
             .create_bucket(BUCKET_NAME)
             .send()
             .await
             .expect("failed to create bucket");
         println!("bucket {} created", BUCKET_NAME);
-
-        MINIO_CLIENT
-            .put_bucket_policy(BUCKET_NAME)
-            .config(public_bucket_policy(BUCKET_NAME))
-            .send()
-            .await
-            .expect("failed to set bucket policy");
-        println!("bucket {} policy set", BUCKET_NAME);
     } else {
-        println!("bucket {} exist", BUCKET_NAME);
+        println!("bucket {} exists", BUCKET_NAME);
     }
+
+    MINIO_CLIENT
+        .put_bucket_policy(BUCKET_NAME)
+        .config(public_bucket_policy(BUCKET_NAME))
+        .send()
+        .await
+        .expect("failed to set bucket policy");
+    println!("bucket {} policy set", BUCKET_NAME);
 }
