@@ -119,6 +119,7 @@ services:
   #########################
   proxy:
     container_name: proxy
+    profiles: [ 'full' ]
     build:
       context: .
       dockerfile: Dockerfile
@@ -131,6 +132,7 @@ services:
       - net
   requester:
     container_name: requester
+    profiles: [ 'full' ]
     build:
       context: .
       dockerfile: Dockerfile
@@ -146,6 +148,7 @@ services:
       - net
   persister:
     container_name: persister
+    profiles: [ 'full' ]
     build:
       context: .
       dockerfile: Dockerfile
@@ -169,6 +172,7 @@ services:
       - net
   browser:
     container_name: browser
+    profiles: [ 'full' ]
     build:
       context: .
       dockerfile: Dockerfile
@@ -186,6 +190,7 @@ services:
       - net
   sched:
     container_name: sched
+    profiles: [ 'full' ]
     build:
       context: .
       dockerfile: Dockerfile
@@ -201,6 +206,7 @@ services:
       - net
   api:
     container_name: api
+    profiles: [ 'full' ]
     build:
       context: .
       dockerfile: Dockerfile
@@ -222,6 +228,7 @@ services:
   ###########################
   postgres_setup:
     container_name: postgres_setup
+    profiles: [ 'full' ]
     build:
       context: .
       dockerfile: Dockerfile
@@ -233,6 +240,7 @@ services:
       - net
   minio_setup:
     container_name: minio_setup
+    profiles: [ 'full' ]
     build:
       context: .
       dockerfile: Dockerfile
@@ -244,6 +252,7 @@ services:
       - net
   kafka_setup:
     container_name: kafka_setup
+    profiles: [ 'full' ]
     build:
       context: .
       dockerfile: Dockerfile
