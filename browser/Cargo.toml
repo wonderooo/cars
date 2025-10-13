@@ -16,3 +16,4 @@ chromiumoxide = "0.7.0"
 tracing = "0.1.41"
 common = { path = "../common", features = ["kafka", "io", "config"] }
 async-trait = "0.1.88"
+chrono = "0.4.42"

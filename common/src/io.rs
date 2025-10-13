@@ -167,7 +167,27 @@ pub mod copart {
     pub struct LotVehicle {
         pub lot_number: i32,
         pub make: String,
+        pub model: String,
         pub year: i32,
+        pub vehicle_type: String,
+        pub vin: Option<String>,
+        pub estimated_retail_value: f64,
+        pub estimated_repair_cost: f64,
+        pub odometer: f64,
+        pub odometer_status: Option<String>,
+        pub engine_name: Option<String>,
+        pub engine_cylinders: Option<String>,
+        pub currency: String,
+        pub sale_date: Option<chrono::NaiveDateTime>,
+        pub main_damage: String,
+        pub other_damage: Option<String>,
+        pub country: String,
+        pub state: String,
+        pub transmission: Option<String>,
+        pub color: String,
+        pub fuel_type: Option<String>,
+        pub drive_type: Option<String>,
+        pub keys_status: Option<String>,
     }
 
     #[derive(Serialize, Deserialize)]

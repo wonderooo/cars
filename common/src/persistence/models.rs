@@ -2,7 +2,6 @@ pub mod copart {
     use crate::bucket;
     use crate::io::copart::LotVehicleVector;
     use diesel::prelude::*;
-    use std::time::SystemTime;
 
     #[derive(Queryable, Selectable, Identifiable)]
     #[diesel(table_name = crate::persistence::schema::lot_vehicle)]
@@ -11,7 +10,29 @@ pub mod copart {
         pub id: i32,
         pub lot_number: i32,
         pub make: String,
+        pub model: String,
         pub year: i32,
+        pub vehicle_type: String,
+        pub vin: Option<String>,
+        pub estimated_retail_value: f64,
+        pub estimated_repair_cost: f64,
+        pub odometer: f64,
+        pub odometer_status: Option<String>,
+        pub engine_name: Option<String>,
+        pub engine_cylinders: Option<String>,
+        pub currency: String,
+        pub sale_date: Option<chrono::NaiveDateTime>,
+        pub main_damage: String,
+        pub other_damage: Option<String>,
+        pub country: String,
+        pub state: String,
+        pub transmission: Option<String>,
+        pub color: String,
+        pub fuel_type: Option<String>,
+        pub drive_type: Option<String>,
+        pub keys_status: Option<String>,
+        pub created_at: chrono::NaiveDateTime,
+        pub updated_at: chrono::NaiveDateTime,
     }
 
     #[derive(Insertable)]
@@ -19,7 +40,27 @@ pub mod copart {
     pub struct NewLotVehicle {
         pub lot_number: i32,
         pub make: String,
+        pub model: String,
         pub year: i32,
+        pub vehicle_type: String,
+        pub vin: Option<String>,
+        pub estimated_retail_value: f64,
+        pub estimated_repair_cost: f64,
+        pub odometer: f64,
+        pub odometer_status: Option<String>,
+        pub engine_name: Option<String>,
+        pub engine_cylinders: Option<String>,
+        pub currency: String,
+        pub sale_date: Option<chrono::NaiveDateTime>,
+        pub main_damage: String,
+        pub other_damage: Option<String>,
+        pub country: String,
+        pub state: String,
+        pub transmission: Option<String>,
+        pub color: String,
+        pub fuel_type: Option<String>,
+        pub drive_type: Option<String>,
+        pub keys_status: Option<String>,
     }
 
     pub struct NewLotVehicles(pub Vec<NewLotVehicle>);
@@ -33,7 +74,27 @@ pub mod copart {
                     .map(|v| NewLotVehicle {
                         lot_number: v.lot_number,
                         make: v.make,
+                        model: v.model,
                         year: v.year,
+                        vehicle_type: v.vehicle_type,
+                        vin: v.vin,
+                        estimated_retail_value: v.estimated_retail_value,
+                        estimated_repair_cost: v.estimated_repair_cost,
+                        odometer: v.odometer,
+                        odometer_status: v.odometer_status,
+                        engine_name: v.engine_name,
+                        engine_cylinders: v.engine_cylinders,
+                        currency: v.currency,
+                        sale_date: v.sale_date,
+                        main_damage: v.main_damage,
+                        other_damage: v.other_damage,
+                        country: v.country,
+                        state: v.state,
+                        transmission: v.transmission,
+                        color: v.color,
+                        fuel_type: v.fuel_type,
+                        drive_type: v.drive_type,
+                        keys_status: v.keys_status,
                     })
                     .collect(),
             )
@@ -62,8 +123,8 @@ pub mod copart {
         pub sequence_number: i32,
         pub image_type: String,
 
-        pub created_at: SystemTime,
-        pub updated_at: SystemTime,
+        pub created_at: chrono::NaiveDateTime,
+        pub updated_at: chrono::NaiveDateTime,
 
         pub lot_vehicle_number: i32,
     }

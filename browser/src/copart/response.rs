@@ -219,7 +219,29 @@ pub mod lot_search {
                     .map(|l| LotVehicle {
                         lot_number: l.ln as i32,
                         make: l.mkn,
+                        model: l.lm,
                         year: l.lcy,
+                        vehicle_type: l.member_vehicle_type,
+                        vin: l.fv,
+                        estimated_retail_value: l.la,
+                        estimated_repair_cost: l.rc,
+                        odometer: l.orr,
+                        odometer_status: l.ord,
+                        engine_name: l.egn,
+                        engine_cylinders: l.cy,
+                        currency: l.cuc,
+                        sale_date: l.ad.and_then(|millis| {
+                            chrono::DateTime::from_timestamp_millis(millis).map(|t| t.naive_utc())
+                        }),
+                        main_damage: l.dd,
+                        other_damage: l.sdd,
+                        country: l.loc_country,
+                        state: l.loc_state,
+                        transmission: l.tmtp,
+                        color: l.clr,
+                        fuel_type: l.ft,
+                        drive_type: l.drv,
+                        keys_status: l.hk,
                     })
                     .collect(),
             )

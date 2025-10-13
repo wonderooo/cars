@@ -18,7 +18,8 @@ async-trait = { version = "0.1.88", optional = true }
 thiserror = { version = "2.0.12", optional = true }
 chromiumoxide = { version = "0.7.0", optional = true }
 base64 = { version = "0.22.1", optional = true }
-diesel = { version = "2.2.10", features = ["postgres"], optional = true }
+diesel = { version = "2.2.10", features = ["postgres", "chrono"], optional = true }
+chrono = { version = "0.4.42", features = ["serde"], optional = true }
 diesel-async = { version = "0.7.3", features = ["deadpool", "postgres", "migrations"], optional = true }
 url = { version = "2.5.4", optional = true }
 axum = { version = "0.8.4", optional = true }
@@ -46,9 +47,9 @@ required-features = ["postgres-setup"]
 default = ["logging"]
 logging = ["tracing-loki", "tracing-subscriber", "tokio", "url", "tracing", "config"]
 kafka = ["rdkafka", "tokio-util", "serde", "serde_json", "tokio", "tracing", "uuid", "async-trait", "thiserror"]
-io = ["chromiumoxide", "base64", "diesel", "diesel-async", "url", "thiserror", "serde", "serde_json", "kafka"]
+io = ["chromiumoxide", "base64", "diesel", "diesel-async", "url", "thiserror", "serde", "serde_json", "kafka", "chrono"]
 memprof = ["axum", "jemalloc_pprof", "tokio", "tokio-util"]
-persistence = ["diesel", "diesel-async", "io", "bucket", "config"]
+persistence = ["diesel", "diesel-async", "io", "bucket", "config", "chrono"]
 bucket = ["mime_guess", "minio", "config"]
 config = ["serde", "serde_yaml"]
 kafka-setup = ["kafka", "tokio/full", "config"]
