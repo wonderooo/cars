@@ -9,12 +9,19 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
 
 #[derive(Deserialize)]
 pub struct Config {
+    pub copart: Copart,
     pub proxy: Proxy,
     pub minio: Minio,
     pub postgres: Postgres,
     pub kafka: Kafka,
     pub loki: Loki,
     pub data_bright: DataBright,
+}
+
+#[derive(Deserialize)]
+pub struct Copart {
+    pub user: String,
+    pub password: String,
 }
 
 #[derive(Deserialize)]

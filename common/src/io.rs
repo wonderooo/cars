@@ -22,6 +22,8 @@ pub mod error {
         CorrelationIdNotFound(String),
         #[error("page number not found in query params")]
         PageNumberNotFound,
+        #[error("lot number not found in query params")]
+        LotNumberNotFound,
         #[error("could not decode to base64 from given argument: {0}")]
         Base64Decode(String),
         #[error("could not build valid URL from given argument")]
@@ -34,6 +36,8 @@ pub mod error {
         PgPool(String),
         #[error("diesel error: `{0}`")]
         Diesel(String),
+        #[error("smf error: `{0}`")]
+        Smf(String),
     }
 
     impl From<std::num::ParseIntError> for GeneralError {
@@ -99,15 +103,25 @@ pub mod copart {
 
     pub type LotNumber = i32;
     pub type PageNumber = usize;
+    pub type AuctionId = String;
     pub type Base64Blob = String;
+    pub type DateTimeRfc3339 = String;
+    pub type LotYear = usize;
 
     #[derive(Debug, Serialize, Deserialize)]
     pub enum CopartCmd {
         /// Sent by `sched` periodically, received by `browser` to fetch raw data from the provider
-        LotSearch(PageNumber),
+        LotSearch {
+            page_number: PageNumber,
+            date_start: DateTimeRfc3339,
+            date_end: DateTimeRfc3339,
+            year_start: LotYear,
+            year_end: LotYear,
+        },
         /// Sent by `persister` after lot search response has been received, received by `browser`
         /// to fetch image urls from the provider
         LotImages(LotNumber),
+        Auction(AuctionId),
     }
 
     #[derive(Debug, Serialize, Deserialize)]
@@ -126,8 +140,9 @@ pub mod copart {
     impl ToTopic for CopartCmd {
         fn to_topic(&self) -> String {
             match self {
-                Self::LotSearch(..) => "copart_cmd_lot_search".to_string(),
+                Self::LotSearch { .. } => "copart_cmd_lot_search".to_string(),
                 Self::LotImages(..) => "copart_cmd_lot_images".to_string(),
+                Self::Auction(_) => "copart_cmd_auction".to_string(),
             }
         }
     }

@@ -21,8 +21,7 @@ diesel::table! {
 }
 
 diesel::table! {
-    lot_vehicle (id) {
-        id -> Int4,
+    lot_vehicle (lot_number) {
         lot_number -> Int4,
         make -> Varchar,
         model -> Varchar,
@@ -50,6 +49,8 @@ diesel::table! {
         updated_at -> Timestamp,
     }
 }
+
+diesel::joinable!(lot_image -> lot_vehicle (lot_vehicle_number));
 
 diesel::allow_tables_to_appear_in_same_query!(
     lot_image,

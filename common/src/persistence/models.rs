@@ -6,8 +6,8 @@ pub mod copart {
     #[derive(Queryable, Selectable, Identifiable)]
     #[diesel(table_name = crate::persistence::schema::lot_vehicle)]
     #[diesel(check_for_backend(diesel::pg::Pg))]
+    #[diesel(primary_key(lot_number))]
     pub struct LotVehicle {
-        pub id: i32,
         pub lot_number: i32,
         pub make: String,
         pub model: String,
