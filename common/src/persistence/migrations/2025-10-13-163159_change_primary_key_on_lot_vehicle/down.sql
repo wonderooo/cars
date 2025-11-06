@@ -1,0 +1,2 @@
+ALTER TABLE lot_vehicle DROP CONSTRAINT lot_vehicle_pkey;
+ALTER TABLE lot_vehicle ADD COLUMN id SERIAL PRIMARY KEY;
