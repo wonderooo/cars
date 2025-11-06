@@ -50,7 +50,6 @@ pub fn App() -> impl IntoView {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LotVehicleDto {
-    pub id: i32,
     pub lot_number: i32,
     pub make: String,
     pub year: i32,
@@ -72,7 +71,6 @@ pub async fn query_db() -> Result<Vec<LotVehicleDto>, ServerFnError> {
         .await?
         .into_iter()
         .map(|v| LotVehicleDto {
-            id: v.id,
             lot_number: v.lot_number,
             make: v.make,
             year: v.year,
