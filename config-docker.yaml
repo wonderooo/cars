@@ -1,3 +1,7 @@
+copart:
+  user: #replace
+  password: #replace
+
 proxy:
   host: proxy
   port: 8100
@@ -23,8 +27,8 @@ loki:
 data_bright:
   host: "brd.superproxy.io"
   port: 33335
-  user: brd-customer-hl_cf8753b1-zone-datacenter_proxy1
-  password: xuecob6ew790
+  user: #replace
+  password: #replace
   allow_domains:
     - "www.copart.ca"
     - "copart.ca"
