@@ -1,4 +1,5 @@
 pub mod lot_search {
+    use common::io::copart::{DateTimeRfc3339, LotYear, PageNumber};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
@@ -24,8 +25,8 @@ pub mod lot_search {
     }
 
     impl SearchRequest {
-        pub fn new(page: usize) -> Self {
-            let size = 100;
+        pub fn new(page: PageNumber) -> Self {
+            let size = 1000;
             Self {
                 query: vec!["*".to_string()],
                 filter: HashMap::new(),
@@ -48,6 +49,80 @@ pub mod lot_search {
                 back_url: String::new(),
                 include_tag_by_field: HashMap::new(),
                 raw_params: HashMap::new(),
+            }
+        }
+
+        pub fn with_auction_date(
+            mut self,
+            date_start: &DateTimeRfc3339,
+            date_end: &DateTimeRfc3339,
+        ) -> Self {
+            self.filter.insert(
+                "SDAT".to_string(),
+                [format!(
+                    "auction_date_utc:[\"{date_start}\" TO \"{date_end}\"]"
+                )]
+                .into(),
+            );
+            self
+        }
+
+        pub fn with_year(mut self, year_start: &LotYear, year_end: &LotYear) -> Self {
+            self.filter.insert(
+                "YEAR".to_string(),
+                [format!("lot_year:[{year_start} TO {year_end}]")].into(),
+            );
+            self
+        }
+    }
+}
+
+pub mod login {
+    use common::config::CONFIG;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct LoginRequest {
+        pub username: String,
+        pub account_type: String,
+        pub password: String,
+        pub account_type_value: String,
+        pub login_location_info: LoginLocationInfo,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct LoginLocationInfo {
+        pub country_code: String,
+        pub country_name: String,
+        pub state_name: String,
+        pub state_code: String,
+        pub city_name: String,
+        pub latitude: f64,
+        pub longitude: f64,
+        pub zip_code: String,
+        pub time_zone: String,
+    }
+
+    impl LoginRequest {
+        pub fn new() -> Self {
+            Self {
+                username: CONFIG.copart.user.to_owned(),
+                account_type: "0".into(),
+                password: CONFIG.copart.password.to_owned(),
+                account_type_value: "0".into(),
+                login_location_info: LoginLocationInfo {
+                    country_code: "POL".into(),
+                    country_name: "Poland".into(),
+                    state_name: "Mazowieckie".into(),
+                    state_code: "".into(),
+                    city_name: "Warsaw".into(),
+                    latitude: 52.22977,
+                    longitude: 21.01178,
+                    zip_code: "05-077".into(),
+                    time_zone: "+02:00".into(),
+                },
             }
         }
     }

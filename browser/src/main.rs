@@ -12,26 +12,33 @@ async fn main() {
     info!("starting app");
     let cancellation_token = CancellationToken::new();
 
-    let ((cmd_sender, response_receiver), pool_done) = CopartBrowserPool::run(
-        8,
+    let (pool, sig) = CopartBrowserPool::new(
         CONFIG.proxy.host.to_owned(),
         CONFIG.proxy.port,
         cancellation_token.clone(),
-    )
-    .await;
+    );
+    let pool_done = pool.run(4).await;
 
     let rx_done = KafkaReceiver::new(
         CONFIG.kafka.url.to_owned(),
         "copart_cmd_lot_search_0",
-        &["copart_cmd_lot_search", "copart_cmd_lot_images"],
+        &[
+            "copart_cmd_lot_search",
+            "copart_cmd_lot_images",
+            "copart_cmd_auction",
+        ],
     )
     .run_on(
-        CopartPoolTxKafkaAdapter { cmd_sender },
+        CopartPoolTxKafkaAdapter {
+            cmd_sender: sig.cmd_sender,
+        },
         cancellation_token.clone(),
     );
 
     let tx_done = KafkaSender::new(CONFIG.kafka.url.to_owned()).run_on(
-        CopartPoolRxKafkaAdapter { response_receiver },
+        CopartPoolRxKafkaAdapter {
+            response_receiver: sig.response_receiver,
+        },
         cancellation_token.clone(),
     );
 

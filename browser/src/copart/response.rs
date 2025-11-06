@@ -155,14 +155,14 @@ pub mod lot_search {
         pub hide_lane_item: bool,
         pub hide_grid_row: bool,
         #[serde(rename = "isPWlot")]
-        pub is_pwlot: bool,
-        pub lspa: f64,
-        pub other_goods_lot: bool,
-        pub lat: f64,
-        pub site_codes: Vec<String>,
-        pub zip: String,
-        pub long: f64,
-        pub loc_city: String,
+        pub is_pwlot: Option<bool>,
+        pub lspa: Option<f64>,
+        pub other_goods_lot: Option<bool>,
+        pub lat: Option<f64>,
+        pub site_codes: Option<Vec<String>>,
+        pub zip: Option<String>,
+        pub long: Option<f64>,
+        pub loc_city: Option<String>,
         pub lh: Option<String>,
         pub mtrim: Option<String>,
         pub tsmn: Option<String>,
@@ -250,7 +250,7 @@ pub mod lot_search {
 }
 
 pub mod lot_images {
-    use common::io::copart::LotImages;
+    use common::io::copart::{LotImages, LotImagesVector};
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -299,20 +299,226 @@ pub mod lot_images {
         pub ln: i64,
     }
 
-    impl Into<Vec<LotImages>> for ApiResponse {
-        fn into(self) -> Vec<LotImages> {
-            self.data
-                .images_list
-                .content
-                .into_iter()
-                .map(|i| LotImages {
-                    thumbnail_url: i.thumbnail_url,
-                    full_url: i.full_url,
-                    high_res_url: i.high_res_url,
-                    sequence_number: i.image_seq_number,
-                    image_type: i.image_type_enum,
+    impl Into<LotImagesVector> for ApiResponse {
+        fn into(self) -> LotImagesVector {
+            LotImagesVector(
+                self.data
+                    .images_list
+                    .content
+                    .into_iter()
+                    .map(|i| LotImages {
+                        thumbnail_url: i.thumbnail_url,
+                        full_url: i.full_url,
+                        high_res_url: i.high_res_url,
+                        sequence_number: i.image_seq_number,
+                        image_type: i.image_type_enum,
+                    })
+                    .collect(),
+            )
+        }
+    }
+}
+
+pub mod auction {
+    pub mod plain {
+        use base64::Engine;
+        use serde::{Deserialize, Deserializer, Serialize};
+
+        #[derive(Debug, Serialize)]
+        pub struct SoldMessage {
+            #[serde(rename = "@class")]
+            pub class: String,
+            #[serde(rename = "EMPTY")]
+            pub empty: bool,
+            #[serde(rename = "FORMATNAME")]
+            pub format_name: String,
+            #[serde(rename = "APRFLG")]
+            pub apr_flg: String,
+            #[serde(rename = "BID")]
+            pub bid: String,
+            #[serde(rename = "ATTRIBUTE")]
+            pub attribute: String,
+            #[serde(rename = "BUYERST")]
+            pub buyer_st: String,
+            #[serde(rename = "BUYERCTR")]
+            pub buyer_ctr: String,
+            #[serde(rename = "MINMET")]
+            pub min_met: String,
+            #[serde(rename = "LOTNO")]
+            pub lot_no: String,
+            #[serde(rename = "BUYERNO")]
+            pub buyer_no: String,
+            #[serde(rename = "TYPE")]
+            pub type_field: String,
+        }
+
+        #[derive(Debug, Serialize, Deserialize)]
+        struct SoldMessagePhantom {
+            #[serde(rename = "@class")]
+            pub class: String,
+            #[serde(rename = "EMPTY")]
+            pub empty: bool,
+            #[serde(rename = "FORMATNAME")]
+            pub format_name: String,
+            #[serde(rename = "APRFLG")]
+            pub apr_flg: String,
+            #[serde(rename = "BID")]
+            pub bid: String,
+            #[serde(rename = "ATTRIBUTE")]
+            pub attribute: String,
+            #[serde(rename = "BUYERST")]
+            pub buyer_st: String,
+            #[serde(rename = "BUYERCTR")]
+            pub buyer_ctr: String,
+            #[serde(rename = "MINMET")]
+            pub min_met: String,
+            #[serde(rename = "LOTNO")]
+            pub lot_no: String,
+            #[serde(rename = "BUYERNO")]
+            pub buyer_no: String,
+            #[serde(rename = "TYPE")]
+            pub type_field: String,
+        }
+
+        impl<'de> Deserialize<'de> for SoldMessage {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                let value = serde_json::Value::deserialize(deserializer)?;
+                let msg = value
+                    .get(0)
+                    .ok_or_else(|| serde::de::Error::custom("invalid len 0"))?
+                    .get("d")
+                    .ok_or_else(|| serde::de::Error::missing_field("d"))?
+                    .as_array()
+                    .ok_or_else(|| serde::de::Error::custom("as array convert 2"))?
+                    .get(1)
+                    .ok_or_else(|| serde::de::Error::custom("invalid len 1"))?
+                    .get("Data")
+                    .ok_or_else(|| serde::de::Error::missing_field("Data"))?
+                    .as_str()
+                    .ok_or_else(|| serde::de::Error::custom("as str convert"))?;
+
+                let decoded_bytes = base64::engine::general_purpose::STANDARD
+                    .decode(msg)
+                    .map_err(serde::de::Error::custom)?;
+                let decoded_str =
+                    String::from_utf8(decoded_bytes).map_err(serde::de::Error::custom)?;
+                let phantom: SoldMessagePhantom =
+                    serde_json::from_str(&decoded_str).map_err(serde::de::Error::custom)?;
+                Ok(SoldMessage {
+                    class: phantom.class,
+                    empty: phantom.empty,
+                    format_name: phantom.format_name,
+                    apr_flg: phantom.apr_flg,
+                    bid: phantom.bid,
+                    attribute: phantom.attribute,
+                    buyer_st: phantom.buyer_st,
+                    buyer_ctr: phantom.buyer_ctr,
+                    min_met: phantom.min_met,
+                    lot_no: phantom.lot_no,
+                    buyer_no: phantom.buyer_no,
+                    type_field: phantom.type_field,
                 })
-                .collect()
+            }
+        }
+    }
+
+    pub mod solace {
+        use base64::Engine;
+        use serde::{Deserialize, Deserializer, Serialize};
+
+        #[derive(Debug, Serialize)]
+        pub struct SoldMessage {
+            #[serde(rename = "@class")]
+            pub class: String,
+            #[serde(rename = "EMPTY")]
+            pub empty: bool,
+            #[serde(rename = "FORMATNAME")]
+            pub format_name: String,
+            #[serde(rename = "APRFLG")]
+            pub apr_flg: String,
+            #[serde(rename = "BID")]
+            pub bid: String,
+            #[serde(rename = "ATTRIBUTE")]
+            pub attribute: String,
+            #[serde(rename = "BUYERST")]
+            pub buyer_st: String,
+            #[serde(rename = "BUYERCTR")]
+            pub buyer_ctr: String,
+            #[serde(rename = "MINMET")]
+            pub min_met: String,
+            #[serde(rename = "LOTNO")]
+            pub lot_no: String,
+            #[serde(rename = "BUYERNO")]
+            pub buyer_no: String,
+            #[serde(rename = "TYPE")]
+            pub type_field: String,
+        }
+
+        #[derive(Debug, Serialize, Deserialize)]
+        struct SoldMessagePhantom {
+            #[serde(rename = "@class")]
+            pub class: String,
+            #[serde(rename = "EMPTY")]
+            pub empty: bool,
+            #[serde(rename = "FORMATNAME")]
+            pub format_name: String,
+            #[serde(rename = "APRFLG")]
+            pub apr_flg: String,
+            #[serde(rename = "BID")]
+            pub bid: String,
+            #[serde(rename = "ATTRIBUTE")]
+            pub attribute: String,
+            #[serde(rename = "BUYERST")]
+            pub buyer_st: String,
+            #[serde(rename = "BUYERCTR")]
+            pub buyer_ctr: String,
+            #[serde(rename = "MINMET")]
+            pub min_met: String,
+            #[serde(rename = "LOTNO")]
+            pub lot_no: String,
+            #[serde(rename = "BUYERNO")]
+            pub buyer_no: String,
+            #[serde(rename = "TYPE")]
+            pub type_field: String,
+        }
+
+        impl<'de> serde::Deserialize<'de> for SoldMessage {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                let value = serde_json::Value::deserialize(deserializer)?;
+                let msg = value
+                    .get("data")
+                    .ok_or_else(|| serde::de::Error::missing_field("data"))?
+                    .as_str()
+                    .ok_or_else(|| serde::de::Error::custom("as str convert"))?;
+
+                let decoded_bytes = base64::engine::general_purpose::STANDARD
+                    .decode(msg)
+                    .map_err(serde::de::Error::custom)?;
+                let decoded_str =
+                    String::from_utf8(decoded_bytes).map_err(serde::de::Error::custom)?;
+                let phantom: SoldMessagePhantom =
+                    serde_json::from_str(&decoded_str).map_err(serde::de::Error::custom)?;
+                Ok(SoldMessage {
+                    class: phantom.class,
+                    empty: phantom.empty,
+                    format_name: phantom.format_name,
+                    apr_flg: phantom.apr_flg,
+                    bid: phantom.bid,
+                    attribute: phantom.attribute,
+                    buyer_st: phantom.buyer_st,
+                    buyer_ctr: phantom.buyer_ctr,
+                    min_met: phantom.min_met,
+                    lot_no: phantom.lot_no,
+                    buyer_no: phantom.buyer_no,
+                    type_field: phantom.type_field,
+                })
+            }
         }
     }
 }
