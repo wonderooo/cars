@@ -28,6 +28,10 @@ async fn main() {
             "/lot_vehicle/{lot_number}",
             get(api::routes::lot_vehicle::by_ln),
         )
+        .route(
+            "/lot_vehicle/vin/{vin}",
+            get(api::routes::lot_vehicle::by_vin),
+        )
         .with_state(pool)
         .merge(SwaggerUi::new("/docs").url("/api-doc/openapi.json", api::Docs::openapi()));
 

@@ -12,15 +12,21 @@ pub enum ApiError {
     #[error("postgres pool error: `{0}`")]
     PgPool(#[from] diesel_async::pooled_connection::deadpool::PoolError),
     #[error("lot vehicle with given ln not found: `{0}`")]
-    LotVehicleNotFound(i32),
+    LotVehicleNotFoundLn(i32),
+    #[error("lot vehicle with given vin not found: `{0}`")]
+    LotVehicleNotFoundVin(String),
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
-            Self::LotVehicleNotFound(ln) => (
+            Self::LotVehicleNotFoundLn(ln) => (
                 StatusCode::NOT_FOUND,
-                format!("lot vehicle with lot number not found: `{}`", ln),
+                format!("lot vehicle with lot number not found: `{ln}`"),
+            ),
+            Self::LotVehicleNotFoundVin(vin) => (
+                StatusCode::NOT_FOUND,
+                format!("lot vehicle with vin number not found: `{vin}`"),
             ),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
