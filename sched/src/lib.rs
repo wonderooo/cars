@@ -1,79 +1,83 @@
 pub mod copart;
 
 use async_trait::async_trait;
-use std::sync::Arc;
-use tokio::sync::Notify;
-use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
-use tracing::{debug, info};
+use chrono::Utc;
+use std::collections::HashMap;
+use tracing::debug;
 
 pub struct Scheduler {
-    pub tasks: Vec<Box<dyn Task>>,
+    pub tasks: Vec<ScheduledTask>,
 }
 
 #[async_trait]
 pub trait Task: Send {
-    async fn run(&self);
-
-    fn duration(&self) -> tokio::time::Duration;
+    async fn run(&self, opts: Option<&HashMap<String, String>>);
 
     fn descriptor(&self) -> Option<&'static str> {
         None
     }
 }
 
+pub enum ScheduledTask {
+    Interval {
+        task: Box<dyn Task>,
+        interval: tokio::time::Duration,
+    },
+    Timed {
+        task: Box<dyn Task>,
+        when: chrono::NaiveDateTime,
+    },
+}
+
 impl Scheduler {
-    pub fn new() -> Self {
-        Self { tasks: Vec::new() }
+    pub fn run_task(task: ScheduledTask, opts: Option<HashMap<String, String>>) {
+        match task {
+            ScheduledTask::Interval { task, interval } => {
+                Self::spawn_interval_task(task, interval, opts)
+            }
+            ScheduledTask::Timed { task, when } => Self::spawn_timed_task(task, when, opts),
+        }
     }
 
-    pub fn with_task(mut self, task: Box<dyn Task>) -> Self {
-        self.tasks.push(task);
-        self
-    }
-
-    pub fn run(self, cancellation_token: CancellationToken) -> Arc<Notify> {
-        let handles = self._run_blocking();
-
-        let done = Arc::new(Notify::new());
+    fn spawn_interval_task(
+        task: Box<dyn Task>,
+        interval: tokio::time::Duration,
+        opts: Option<HashMap<String, String>>,
+    ) {
         tokio::spawn({
-            let done = Arc::clone(&done);
-            async move {
-                cancellation_token.cancelled().await;
-                handles.iter().for_each(|handle| handle.abort());
-                info!("scheduler closed");
-                done.notify_waiters();
+            {
+                async move {
+                    let mut ticker = tokio::time::interval(interval);
+                    loop {
+                        ticker.tick().await;
+                        debug!(
+                            "running task with descriptor: `{:?}` and duration: `{:?}`",
+                            task.descriptor(),
+                            interval,
+                        );
+                        task.run(opts.as_ref()).await;
+                    }
+                }
             }
         });
-
-        done
     }
 
-    pub async fn run_blocking(self) {
-        futures::future::join_all(self._run_blocking()).await;
-    }
-
-    fn _run_blocking(self) -> Vec<JoinHandle<()>> {
-        self.tasks
-            .into_iter()
-            .map(|task| {
-                debug!("spawning task interval");
-                tokio::spawn({
-                    async move {
-                        let mut interval = tokio::time::interval(task.duration());
-                        loop {
-                            interval.tick().await;
-                            debug!(
-                                "running task with descriptor: `{:?}` and duration: `{:?}s`",
-                                task.descriptor(),
-                                task.duration()
-                            );
-                            task.run().await;
-                        }
-                    }
-                })
-            })
-            .collect()
+    fn spawn_timed_task(
+        task: Box<dyn Task>,
+        when: chrono::NaiveDateTime,
+        opts: Option<HashMap<String, String>>,
+    ) {
+        tokio::spawn(async move {
+            let now = Utc::now().naive_utc();
+            let delay = (when - now).to_std().unwrap_or(std::time::Duration::ZERO);
+            tokio::time::sleep(delay).await;
+            debug!(
+                "running task with descriptor: `{:?}` set at: `{}`",
+                task.descriptor(),
+                when,
+            );
+            task.run(opts.as_ref()).await;
+        });
     }
 }
 
@@ -91,8 +95,9 @@ pub fn days(d: u64) -> tokio::time::Duration {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Scheduler, Task};
+    use crate::{ScheduledTask, Scheduler, Task};
     use async_trait::async_trait;
+    use std::collections::HashMap;
 
     struct NopTask {
         sender: tokio::sync::mpsc::Sender<()>,
@@ -100,12 +105,8 @@ mod tests {
 
     #[async_trait]
     impl Task for NopTask {
-        async fn run(&self) {
+        async fn run(&self, _opts: Option<&HashMap<String, String>>) {
             let _ = self.sender.send(()).await;
-        }
-
-        fn duration(&self) -> tokio::time::Duration {
-            tokio::time::Duration::from_secs(3)
         }
     }
 
@@ -114,10 +115,21 @@ mod tests {
         let (tx1, mut rx1) = tokio::sync::mpsc::channel(1);
         let (tx2, mut rx2) = tokio::sync::mpsc::channel(1);
 
-        let scheduler = Scheduler::new()
-            .with_task(Box::new(NopTask { sender: tx1 }))
-            .with_task(Box::new(NopTask { sender: tx2 }));
-        tokio::spawn(scheduler.run_blocking());
+        Scheduler::run_task(
+            ScheduledTask::Interval {
+                task: Box::new(NopTask { sender: tx1 }),
+                interval: tokio::time::Duration::from_secs(3),
+            },
+            None,
+        );
+
+        Scheduler::run_task(
+            ScheduledTask::Interval {
+                task: Box::new(NopTask { sender: tx2 }),
+                interval: tokio::time::Duration::from_secs(3),
+            },
+            None,
+        );
 
         tokio::time::advance(tokio::time::Duration::from_secs(2)).await;
         assert!(rx1.try_recv().is_err());
