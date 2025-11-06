@@ -3926,10 +3926,9 @@ name = "sched"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "common",
- "futures",
  "tokio",
- "tokio-util",
  "tracing",
 ]
 
