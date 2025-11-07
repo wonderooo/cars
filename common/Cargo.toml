@@ -27,6 +27,7 @@ jemalloc_pprof = { version = "0.8.1", features = ["flamegraph"], optional = true
 mime_guess = { version = "2.0.5", optional = true }
 minio = { version = "0.3.0", optional = true }
 diesel_migrations = { version = "2.3.0", optional = true }
+clap = { version = "4.5.41", features = ["derive"], optional = true }
 
 [[bin]]
 name = "kafka"
@@ -43,6 +44,11 @@ name = "postgres"
 path = "src/bin/postgres.rs"
 required-features = ["postgres-setup"]
 
+[[bin]]
+name = "manager"
+path = "src/bin/manager.rs"
+required-features = ["manager"]
+
 [features]
 default = ["logging"]
 logging = ["tracing-loki", "tracing-subscriber", "tokio", "url", "tracing", "config"]
@@ -55,3 +61,4 @@ config = ["serde", "serde_yaml"]
 kafka-setup = ["kafka", "tokio/full", "config"]
 minio-setup = ["bucket", "minio", "io"]
 postgres-setup = ["diesel_migrations", "persistence"]
+manager = ["kafka", "tokio/full", "config", "bucket", "minio", "io", "diesel_migrations", "persistence", "clap/derive"]
