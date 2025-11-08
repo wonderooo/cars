@@ -12,3 +12,46 @@ pub mod logging;
 pub mod memprof;
 #[cfg(feature = "persistence")]
 pub mod persistence;
+
+pub async fn retry<F, O, E>(timeout: std::time::Duration, tries: usize, func: F) -> Result<O, E>
+where
+    F: Fn() -> Result<O, E>,
+{
+    let mut attempt = 0;
+    loop {
+        match func() {
+            Ok(o) => return Ok(o),
+            Err(e) => {
+                attempt += 1;
+                if attempt >= tries {
+                    return Err(e);
+                }
+                tokio::time::sleep(timeout).await;
+            }
+        };
+    }
+}
+
+pub async fn retry_async<F, Fut, O, E>(
+    timeout: std::time::Duration,
+    tries: usize,
+    func: F,
+) -> Result<O, E>
+where
+    F: Fn() -> Fut,
+    Fut: Future<Output = Result<O, E>>,
+{
+    let mut attempt = 0;
+    loop {
+        match func().await {
+            Ok(o) => return Ok(o),
+            Err(e) => {
+                attempt += 1;
+                if attempt >= tries {
+                    return Err(e);
+                }
+                tokio::time::sleep(timeout).await;
+            }
+        };
+    }
+}

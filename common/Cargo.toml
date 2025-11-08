@@ -9,7 +9,7 @@ tokio-util = { version = "0.7.15", optional = true }
 serde = { version = "1.0.219", optional = true, features = ["derive"] }
 serde_json = { version = "1.0.140", optional = true }
 serde_yaml = { version = "0.9.33", optional = true }
-tokio = { version = "1.45.1", optional = true }
+tokio = { version = "1.45.1" }
 tracing = { version = "0.1.41", optional = true }
 uuid = { version = "1.17.0", features = ["v4"], optional = true }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"], optional = true }
@@ -52,10 +52,10 @@ required-features = ["manager"]
 
 [features]
 default = ["logging"]
-logging = ["tracing-loki", "tracing-subscriber", "tokio", "url", "tracing", "config"]
-kafka = ["rdkafka", "tokio-util", "serde", "serde_json", "tokio", "tracing", "uuid", "async-trait", "thiserror"]
+logging = ["tracing-loki", "tracing-subscriber", "url", "tracing", "config"]
+kafka = ["rdkafka", "tokio-util", "serde", "serde_json", "tracing", "uuid", "async-trait", "thiserror"]
 io = ["chromiumoxide", "base64", "diesel", "diesel-async", "url", "thiserror", "serde", "serde_json", "kafka", "chrono"]
-memprof = ["axum", "jemalloc_pprof", "tokio", "tokio-util"]
+memprof = ["axum", "jemalloc_pprof", "tokio-util"]
 persistence = ["diesel", "diesel-async", "io", "bucket", "config", "chrono"]
 bucket = ["mime_guess", "minio", "config"]
 config = ["serde", "serde_yaml", "dotenvy"]
