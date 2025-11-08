@@ -28,6 +28,7 @@ mime_guess = { version = "2.0.5", optional = true }
 minio = { version = "0.3.0", optional = true }
 diesel_migrations = { version = "2.3.0", optional = true }
 clap = { version = "4.5.41", features = ["derive"], optional = true }
+dotenvy = { version = "0.15.7", optional = true }
 
 [[bin]]
 name = "kafka"
@@ -57,7 +58,7 @@ io = ["chromiumoxide", "base64", "diesel", "diesel-async", "url", "thiserror", "
 memprof = ["axum", "jemalloc_pprof", "tokio", "tokio-util"]
 persistence = ["diesel", "diesel-async", "io", "bucket", "config", "chrono"]
 bucket = ["mime_guess", "minio", "config"]
-config = ["serde", "serde_yaml"]
+config = ["serde", "serde_yaml", "dotenvy"]
 kafka-setup = ["kafka", "tokio/full", "config"]
 minio-setup = ["bucket", "minio", "io"]
 postgres-setup = ["diesel_migrations", "persistence"]
