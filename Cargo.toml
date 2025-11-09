@@ -1,11 +1,11 @@
 [workspace]
-members = [ "api",
+members = ["api",
     "browser",
     "common",
     "panel",
     "persister",
     "proxy",
-    "requester",
+    "imgsync",
     "sched",
 ]
 exclude = ["playground"]

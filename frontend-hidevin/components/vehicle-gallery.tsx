@@ -15,7 +15,7 @@ interface VehicleGalleryProps {
 }
 
 function fullImageUrl(key: string | null): string {
-    return key ? `http://localhost:9000/lot-images/${key}` : "/placeholder.svg"
+    return key ? `https://cdn.carauctions24.eu/${key}` : "/placeholder.svg"
 }
 
 export function VehicleGallery({images}: VehicleGalleryProps) {

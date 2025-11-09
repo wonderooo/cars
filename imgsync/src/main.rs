@@ -1,8 +1,8 @@
 use common::kafka::{KafkaReceiver, KafkaSender};
 use common::logging::setup_logging;
-use requester::copart::adapter::{CopartSinkRxKafkaAdapter, CopartSinkTxKafkaAdapter};
-use requester::copart::client::CopartRequester;
-use requester::copart::sink::CopartRequesterSink;
+use imgsync::copart::adapter::{CopartSinkRxKafkaAdapter, CopartSinkTxKafkaAdapter};
+use imgsync::copart::requester::CopartRequester;
+use imgsync::copart::sink::CopartImageSyncSink;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -10,6 +10,7 @@ use tracing::info;
 use common::memprof::MemProf;
 
 use common::config::CONFIG;
+use imgsync::copart::uploader::CopartUploader;
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
 
@@ -24,11 +25,12 @@ pub static malloc_conf: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0
 
 #[tokio::main]
 async fn main() {
-    setup_logging("requester");
+    setup_logging("imgsync");
     let cancellation_token = CancellationToken::new();
     info!("starting app");
 
-    let (copart_sink, copart_sig) = CopartRequesterSink::new(CopartRequester::new());
+    let (copart_sink, copart_sig) =
+        CopartImageSyncSink::new(CopartRequester::new(), CopartUploader::new());
     let copart_sink_done = copart_sink.run(cancellation_token.clone());
 
     let rx_done = KafkaReceiver::new(

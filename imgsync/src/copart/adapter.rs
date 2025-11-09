@@ -44,7 +44,7 @@ impl SendHandle for CopartSinkRxKafkaAdapter {
 mod tests {
     use super::*;
     use common::io::copart::{
-        LotImageBlobsResponse, LotImageBlobsVector, LotImagesResponse, LotImagesVector,
+        LotImagesResponse, LotImagesVector, SyncedImagesResponse, SyncedImagesVector,
     };
     use common::kafka::{KafkaAdmin, KafkaReceiver, KafkaSender};
     use testcontainers_modules::kafka::apache;
@@ -60,13 +60,13 @@ mod tests {
         let tx_adapter = CopartSinkTxKafkaAdapter { cmd_sender };
 
         KafkaAdmin::new(&kafka_addr)
-            .create_topic("copart_response_lot_image_blobs")
+            .create_topic("copart_response_synced_images")
             .await?;
         tokio::spawn(
             KafkaReceiver::new(
                 &kafka_addr,
                 "test_group",
-                &["copart_response_lot_image_blobs"],
+                &["copart_response_synced_images"],
             )
             .run_on_blocking(tx_adapter),
         );
@@ -77,7 +77,7 @@ mod tests {
                     lot_number: 69,
                     response: LotImagesVector(vec![]),
                 })),
-                "copart_response_lot_image_blobs",
+                "copart_response_synced_images",
             )
             .await?;
 
@@ -95,13 +95,13 @@ mod tests {
         let rx_adapter = CopartSinkRxKafkaAdapter { response_receiver };
 
         KafkaAdmin::new(&kafka_addr)
-            .create_topic("copart_response_lot_image_blobs")
+            .create_topic("copart_response_synced_images")
             .await?;
         tokio::spawn(KafkaSender::new(&kafka_addr).run_on_blocking(rx_adapter));
         response_sender
-            .send(MsgOut::LotImageBlobs(Ok(LotImageBlobsResponse {
+            .send(MsgOut::SyncedImages(Ok(SyncedImagesResponse {
                 lot_number: 69,
-                response: LotImageBlobsVector(vec![]),
+                response: SyncedImagesVector(vec![]),
             })))
             .await?;
 
@@ -109,7 +109,7 @@ mod tests {
             KafkaReceiver::new(
                 &kafka_addr,
                 "test_group",
-                &["copart_response_lot_image_blobs"]
+                &["copart_response_synced_images"]
             )
             .recv::<MsgOut>()
             .await

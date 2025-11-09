@@ -31,7 +31,7 @@ pub struct Config {
     #[serde(skip)]
     pub copart: Copart,
     pub proxy: Proxy,
-    pub minio: Minio,
+    pub s3: S3,
     pub postgres: Postgres,
     pub kafka: Kafka,
     pub loki: Loki,
@@ -52,10 +52,8 @@ pub struct Proxy {
 }
 
 #[derive(Deserialize)]
-pub struct Minio {
-    pub url: String,
-    pub user: String,
-    pub password: String,
+pub struct S3 {
+    pub region: String,
 }
 
 #[derive(Deserialize)]

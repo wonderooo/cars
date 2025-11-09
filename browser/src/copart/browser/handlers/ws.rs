@@ -17,14 +17,14 @@ const SMF_FOOTER_SIZE: usize = 40;
 
 pub struct WsHandler {
     page: Arc<Page>,
-    response_sender: ResponseSender,
+    _response_sender: ResponseSender,
 }
 
 impl WsHandler {
-    pub fn new(page: Arc<Page>, response_sender: ResponseSender) -> Self {
+    pub fn new(page: Arc<Page>, _response_sender: ResponseSender) -> Self {
         Self {
             page,
-            response_sender,
+            _response_sender,
         }
     }
 

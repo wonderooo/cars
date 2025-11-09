@@ -38,6 +38,8 @@ pub mod error {
         Diesel(String),
         #[error("smf error: `{0}`")]
         Smf(String),
+        #[error("s3 error: `{0}`")]
+        S3(String),
     }
 
     impl From<std::num::ParseIntError> for GeneralError {
@@ -96,6 +98,7 @@ pub mod error {
 }
 
 pub mod copart {
+    use crate::count_some_none;
     use crate::io::error::GeneralError;
     use crate::kafka::ToTopic;
     use serde::{Deserialize, Serialize};
@@ -130,11 +133,9 @@ pub mod copart {
         /// from the provider of lot vehicles for a specified page number, received by `persister`
         LotSearch(Result<LotSearchResponse, GeneralError>),
         /// Sent by `browser` after lot images cmd has been received, it includes raw data
-        /// from the provider of single lot vehicle for specified lot number, received by `requester`
+        /// from the provider of single lot vehicle for specified lot number, received by `imgsync`
         LotImages(Result<LotImagesResponse, GeneralError>),
-        /// Sent by `requester` after lot images response has been received, it includes base64
-        /// images of single lot vehicle for specified lot number, received by `persister`
-        LotImageBlobs(Result<LotImageBlobsResponse, GeneralError>),
+        SyncedImages(Result<SyncedImagesResponse, GeneralError>),
     }
 
     impl ToTopic for CopartCmd {
@@ -152,7 +153,7 @@ pub mod copart {
             match self {
                 Self::LotSearch { .. } => "copart_response_lot_search".to_string(),
                 Self::LotImages { .. } => "copart_response_lot_images".to_string(),
-                Self::LotImageBlobs { .. } => "copart_response_lot_image_blobs".to_string(),
+                Self::SyncedImages { .. } => "copart_response_synced_images".to_string(),
             }
         }
     }
@@ -170,9 +171,9 @@ pub mod copart {
     }
 
     #[derive(Debug, Serialize, Deserialize)]
-    pub struct LotImageBlobsResponse {
+    pub struct SyncedImagesResponse {
         pub lot_number: LotNumber,
-        pub response: LotImageBlobsVector,
+        pub response: SyncedImagesVector,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -217,17 +218,23 @@ pub mod copart {
         pub image_type: String,
     }
 
-    #[derive(Serialize, Deserialize)]
-    pub struct LotImageBlobsVector(pub Vec<LotImageBlobs>);
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct SyncedImagesVector(pub Vec<SyncedImages>);
 
     #[derive(Debug, Serialize, Deserialize)]
-    pub struct LotImageBlobs {
-        pub standard: Option<Base64Blob>,
-        pub high_res: Option<Base64Blob>,
-        pub thumbnail: Option<Base64Blob>,
-        pub standard_url: Option<String>,
-        pub high_res_url: Option<String>,
-        pub thumbnail_url: Option<String>,
+    pub struct SyncedImages {
+        pub standard_bucket_key: Option<String>,
+        pub standard_mime_type: Option<String>,
+        pub standard_source_url: Option<String>,
+
+        pub thumbnail_bucket_key: Option<String>,
+        pub thumbnail_mime_type: Option<String>,
+        pub thumbnail_source_url: Option<String>,
+
+        pub high_res_bucket_key: Option<String>,
+        pub high_res_mime_type: Option<String>,
+        pub high_res_source_url: Option<String>,
+
         pub sequence_number: i32,
         pub image_type: String,
     }
@@ -250,30 +257,5 @@ pub mod copart {
                 "thumbnail_url {{some: {some_thumbnail}, none: {none_thumbnail}}}, high_res_url {{some: {some_high}, none: {none_high}}}, full_url {{some: {some_full}, none: {none_full}}}",
             )
         }
-    }
-
-    impl Debug for LotImageBlobsVector {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            let (some_thumbnail, none_thumbnail) =
-                count_some_none(&self.0, |i| i.thumbnail.as_deref());
-            let (some_high, none_high) = count_some_none(&self.0, |i| i.high_res.as_deref());
-            let (some_std, none_std) = count_some_none(&self.0, |i| i.standard.as_deref());
-
-            write!(
-                f,
-                "thumbnail {{some: {some_thumbnail}, none: {none_thumbnail}}}, high_res {{some: {some_high}, none: {none_high}}}, standard {{some: {some_std}, none: {none_std}}}",
-            )
-        }
-    }
-
-    fn count_some_none<I, F>(iter: I, mut field: F) -> (usize, usize)
-    where
-        I: IntoIterator,
-        F: FnMut(&I::Item) -> Option<&str>,
-    {
-        iter.into_iter().fold((0, 0), |acc, x| match field(&x) {
-            Some(_) => (acc.0 + 1, acc.1),
-            None => (acc.0, acc.1 + 1),
-        })
     }
 }

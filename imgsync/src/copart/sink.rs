@@ -1,5 +1,6 @@
-use crate::copart::client::CopartRequesterExt;
-use common::io::copart::{CopartResponse, LotImageBlobsResponse, LotImagesResponse};
+use crate::copart::requester::{CopartRequesterExt, LotImageBlobsVector};
+use crate::copart::uploader::CopartUploaderExt;
+use common::io::copart::{CopartResponse, LotImagesResponse, LotNumber, SyncedImagesResponse};
 use common::io::error::GeneralError;
 use std::sync::Arc;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -15,23 +16,29 @@ pub struct ExternalSignaling {
     pub response_receiver: Receiver<MsgOut>,
 }
 
-pub struct CopartRequesterSink<R: CopartRequesterExt> {
+pub struct CopartImageSyncSink<R: CopartRequesterExt, U: CopartUploaderExt> {
     cmd_receiver: Receiver<MsgIn>,
-    msg_handler: Arc<SingleMsgHandler<R>>,
+    msg_handler: Arc<SingleMsgHandler<R, U>>,
     usage_permits: Arc<Semaphore>,
 }
 
-struct SingleMsgHandler<R: CopartRequesterExt> {
+struct SingleMsgHandler<R: CopartRequesterExt, U: CopartUploaderExt> {
     requester: R,
+    uploader: U,
     response_sender: Sender<MsgOut>,
 }
 
-impl<R: CopartRequesterExt> SingleMsgHandler<R> {
+pub struct LotImageBlobsResponse {
+    pub lot_number: LotNumber,
+    pub response: LotImageBlobsVector,
+}
+
+impl<R: CopartRequesterExt, U: CopartUploaderExt> SingleMsgHandler<R, U> {
     async fn handle_message(&self, msg: MsgIn) {
         match msg {
             MsgIn::LotImages(resp) => self.handle_lot_images(resp).await,
-            MsgIn::LotImageBlobs(_) => warn!(""),
             MsgIn::LotSearch(_) => warn!(""),
+            MsgIn::SyncedImages(_) => warn!(""),
         }
     }
 
@@ -40,12 +47,20 @@ impl<R: CopartRequesterExt> SingleMsgHandler<R> {
         match incoming_msg {
             Ok(images) => {
                 let blobs = self.requester.download_images(images.response).await;
+                let blobs_response = LotImageBlobsResponse {
+                    lot_number: images.lot_number,
+                    response: blobs,
+                };
+
+                let synced = self.uploader.upload_images(blobs_response.into()).await;
+                let synced_response = SyncedImagesResponse {
+                    lot_number: images.lot_number,
+                    response: synced,
+                };
+
                 let _ = self
                     .response_sender
-                    .send(MsgOut::LotImageBlobs(Ok(LotImageBlobsResponse {
-                        lot_number: images.lot_number,
-                        response: blobs,
-                    })))
+                    .send(MsgOut::SyncedImages(Ok(synced_response)))
                     .await;
             }
             Err(e) => error!(producer_error = ?e, "lot images response is an error"),
@@ -53,11 +68,12 @@ impl<R: CopartRequesterExt> SingleMsgHandler<R> {
     }
 }
 
-impl<R> CopartRequesterSink<R>
+impl<R, U> CopartImageSyncSink<R, U>
 where
     R: CopartRequesterExt + Send + Sync + 'static,
+    U: CopartUploaderExt + Send + Sync + 'static,
 {
-    pub fn new(requester: R) -> (Self, ExternalSignaling) {
+    pub fn new(requester: R, uploader: U) -> (Self, ExternalSignaling) {
         let (cmd_sender, cmd_receiver) = tokio::sync::mpsc::channel(32);
         let (response_sender, response_receiver) = tokio::sync::mpsc::channel(32);
         let external_signaling = ExternalSignaling {
@@ -67,6 +83,7 @@ where
         let msg_handler = Arc::new(SingleMsgHandler {
             response_sender,
             requester,
+            uploader,
         });
         let sink = Self {
             msg_handler,
@@ -116,9 +133,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::copart::sink::{CopartRequesterSink, MsgIn};
+    use crate::copart::requester::LotImageBlobs;
+    use crate::copart::sink::{CopartImageSyncSink, MsgIn};
+    use crate::copart::uploader::NewLotImages;
     use async_trait::async_trait;
-    use common::io::copart::{LotImageBlobs, LotImageBlobsVector, LotImagesVector};
+    use common::io::copart::{LotImagesVector, SyncedImagesVector};
     use std::time::Duration;
     use tokio::time::Instant;
 
@@ -141,9 +160,18 @@ mod tests {
         }
     }
 
+    struct NopCopartUploader;
+
+    #[async_trait]
+    impl CopartUploaderExt for NopCopartUploader {
+        async fn upload_images(&self, new_lot_images: NewLotImages) -> SyncedImagesVector {
+            todo!()
+        }
+    }
+
     #[tokio::test]
     async fn test_sink_concurrency() -> Result<(), Box<dyn std::error::Error>> {
-        let (sink, mut sig) = CopartRequesterSink::new(NopCopartRequester);
+        let (sink, mut sig) = CopartImageSyncSink::new(NopCopartRequester, NopCopartUploader);
         tokio::spawn(sink.run_blocking());
 
         for _ in 0..16 {

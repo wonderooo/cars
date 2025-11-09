@@ -55,3 +55,14 @@ where
         };
     }
 }
+
+pub fn count_some_none<I, F, FT>(iter: I, mut field: F) -> (usize, usize)
+where
+    I: IntoIterator,
+    F: FnMut(&I::Item) -> Option<FT>,
+{
+    iter.into_iter().fold((0, 0), |acc, x| match field(&x) {
+        Some(_) => (acc.0 + 1, acc.1),
+        None => (acc.0, acc.1 + 1),
+    })
+}

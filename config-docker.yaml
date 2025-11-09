@@ -2,10 +2,8 @@ proxy:
   host: proxy
   port: 8100
 
-minio:
-  url: http://minio:9000
-  user: root
-  password: secret123
+s3:
+  region: eu-central-1
 
 postgres:
   host: postgres

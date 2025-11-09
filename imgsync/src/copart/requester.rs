@@ -1,12 +1,27 @@
 use async_trait::async_trait;
-use base64::Engine;
-use common::io::copart::{LotImageBlobs, LotImageBlobsVector, LotImagesVector};
+use common::io::copart::LotImagesVector;
+use common::{count_some_none, retry_async};
 use futures::StreamExt;
 use reqwest::IntoUrl;
+use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Semaphore;
 use tokio_util::bytes::Bytes;
 use tracing::{error, info, instrument};
+
+pub struct LotImageBlobsVector(pub Vec<LotImageBlobs>);
+
+pub struct LotImageBlobs {
+    pub standard: Option<Bytes>,
+    pub high_res: Option<Bytes>,
+    pub thumbnail: Option<Bytes>,
+    pub standard_url: Option<String>,
+    pub high_res_url: Option<String>,
+    pub thumbnail_url: Option<String>,
+    pub sequence_number: i32,
+    pub image_type: String,
+}
 
 /// Do not wrap `CopartRequester` in a [`Rc`] or [`Arc`]
 /// because [`reqwest::Client`] uses an [`Arc`] internally.
@@ -32,6 +47,15 @@ impl CopartRequester {
     async fn download_content(&self, url: impl IntoUrl) -> Result<Bytes, reqwest::Error> {
         Ok(self.http.get(url).send().await?.bytes().await?)
     }
+
+    async fn download_content_with_retry(
+        &self,
+        url: impl IntoUrl + Clone,
+        timeout: Duration,
+        tries: usize,
+    ) -> Result<Bytes, reqwest::Error> {
+        retry_async(timeout, tries, || self.download_content(url.to_owned())).await
+    }
 }
 
 #[async_trait]
@@ -54,7 +78,10 @@ impl CopartRequesterExt for CopartRequester {
         info!(sample_lot_images = ?sample_cmds, "sample lot images");
 
         let option_download_content = async |url: &Option<String>| match url {
-            Some(url) => match self.download_content(url).await {
+            Some(url) => match self
+                .download_content_with_retry(url, Duration::from_millis(300), 5)
+                .await
+            {
                 Ok(b) => Some(b),
                 Err(e) => {
                     error!(download_error = ?e, "download image blobs failed");
@@ -78,9 +105,9 @@ impl CopartRequesterExt for CopartRequester {
                     drop(_permit);
 
                     LotImageBlobs {
-                        standard: standard.map(|bytes| encode_to_string(bytes)),
-                        thumbnail: thumbnail.map(|bytes| encode_to_string(bytes)),
-                        high_res: high_res.map(|bytes| encode_to_string(bytes)),
+                        standard,
+                        thumbnail,
+                        high_res,
                         standard_url: img.full_url,
                         thumbnail_url: img.thumbnail_url,
                         high_res_url: img.high_res_url,
@@ -98,10 +125,17 @@ impl CopartRequesterExt for CopartRequester {
     }
 }
 
-fn encode_to_string(bytes: Bytes) -> String {
-    let mut buffer = String::with_capacity(bytes.len());
-    base64::engine::general_purpose::STANDARD.encode_string(bytes, &mut buffer);
-    buffer
+impl Debug for LotImageBlobsVector {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let (some_thumbnail, none_thumbnail) = count_some_none(&self.0, |i| i.thumbnail.as_deref());
+        let (some_high, none_high) = count_some_none(&self.0, |i| i.high_res.as_deref());
+        let (some_std, none_std) = count_some_none(&self.0, |i| i.standard.as_deref());
+
+        write!(
+            f,
+            "thumbnail {{some: {some_thumbnail}, none: {none_thumbnail}}}, high_res {{some: {some_high}, none: {none_high}}}, standard {{some: {some_std}, none: {none_std}}}",
+        )
+    }
 }
 
 #[cfg(test)]

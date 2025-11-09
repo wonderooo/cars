@@ -1,16 +1,24 @@
-pub mod models;
 pub mod policies;
 
 use crate::config::CONFIG;
-use minio::s3::creds::StaticProvider;
-use minio::s3::http::BaseUrl;
-use minio::s3::Client;
+use aws_config::environment::EnvironmentVariableCredentialsProvider;
+use aws_config::{BehaviorVersion, Region};
+use aws_sdk_s3::config::SharedCredentialsProvider;
+use aws_sdk_s3::Client;
 use std::sync::LazyLock;
 
-pub fn init_minio() -> Client {
-    let base_url: BaseUrl = CONFIG.minio.url.parse().expect("invalid url");
-    let provider = StaticProvider::new(&CONFIG.minio.user, &CONFIG.minio.password, None);
-    Client::new(base_url, Some(Box::new(provider)), None, None).expect("failed to create client")
+pub fn init_s3() -> Client {
+    let region = Region::new(CONFIG.s3.region.to_owned());
+    let env_provider = EnvironmentVariableCredentialsProvider::new();
+    let creds_provider = SharedCredentialsProvider::new(env_provider);
+
+    let config = aws_config::SdkConfig::builder()
+        .region(region)
+        .credentials_provider(creds_provider)
+        .behavior_version(BehaviorVersion::latest())
+        .build();
+
+    Client::new(&config)
 }
 
-pub static MINIO_CLIENT: LazyLock<Client> = LazyLock::new(|| init_minio());
+pub static S3_CLIENT: LazyLock<Client> = LazyLock::new(|| init_s3());

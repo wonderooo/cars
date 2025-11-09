@@ -76,7 +76,7 @@ impl Default for CopartAuctionJoinTask {
 
 #[async_trait]
 impl Task for CopartAuctionJoinTask {
-    async fn run(&self, opts: Option<&HashMap<String, String>>) {
+    async fn run(&self, _opts: Option<&HashMap<String, String>>) {
         let cmd = CopartCmd::Auction("59-A".to_string());
         if let Err(e) = self.cmd_sender.send(&cmd, &cmd.to_topic()).await {
             error!("kafka message send failed: `{e}`")

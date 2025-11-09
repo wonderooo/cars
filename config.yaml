@@ -2,10 +2,8 @@ proxy:
   host: localhost
   port: 8100
 
-minio:
-  url: http://localhost:9000
-  user: root
-  password: secret123
+s3:
+  region: eu-central-1
 
 postgres:
   host: localhost

@@ -1,7 +1,7 @@
 use crate::copart::CopartPersisterExt;
-use common::bucket::models::NewLotImages;
-use common::io::copart::{CopartCmd, CopartResponse, LotImageBlobsResponse, LotSearchResponse};
+use common::io::copart::{CopartCmd, CopartResponse, LotSearchResponse, SyncedImagesResponse};
 use common::io::error::GeneralError;
+use common::persistence::models::copart::{NewLotImage, NewLotImages};
 use futures::StreamExt;
 use std::sync::Arc;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -29,7 +29,7 @@ impl<P: CopartPersisterExt> SingleMsgHandler<P> {
     async fn handle_message(&self, msg: CopartResponse) {
         match msg {
             CopartResponse::LotSearch(resp) => self.handle_lot_search(resp).await,
-            CopartResponse::LotImageBlobs(resp) => self.handle_lot_image_blobs(resp).await,
+            CopartResponse::SyncedImages(resp) => self.handle_synced_images(resp).await,
             CopartResponse::LotImages(resp) => {
                 warn!(
                     "persister received lot images response, which should never happen: `{resp:?}`"
@@ -64,13 +64,31 @@ impl<P: CopartPersisterExt> SingleMsgHandler<P> {
     }
 
     #[instrument(skip(self))]
-    async fn handle_lot_image_blobs(
-        &self,
-        incoming_msg: Result<LotImageBlobsResponse, GeneralError>,
-    ) {
+    async fn handle_synced_images(&self, incoming_msg: Result<SyncedImagesResponse, GeneralError>) {
         match incoming_msg {
-            Ok(blobs_resp) => {
-                let new_lot_images: NewLotImages = blobs_resp.into();
+            Ok(synced_resp) => {
+                let new_lot_images: NewLotImages = NewLotImages(
+                    synced_resp
+                        .response
+                        .0
+                        .into_iter()
+                        .map(|i| NewLotImage {
+                            standard_bucket_key: i.standard_bucket_key,
+                            standard_mime_type: i.standard_mime_type,
+                            standard_source_url: i.standard_source_url,
+                            thumbnail_bucket_key: i.thumbnail_bucket_key,
+                            thumbnail_mime_type: i.thumbnail_mime_type,
+                            thumbnail_source_url: i.thumbnail_source_url,
+                            high_res_bucket_key: i.high_res_bucket_key,
+                            high_res_mime_type: i.high_res_mime_type,
+                            high_res_source_url: i.high_res_source_url,
+                            sequence_number: i.sequence_number,
+                            image_type: i.image_type,
+                            lot_vehicle_number: synced_resp.lot_number,
+                        })
+                        .collect(),
+                );
+
                 match self.persister.save_new_lot_images(new_lot_images).await {
                     Ok(_lns) => {}
                     Err(e) => error!(persister_error = ?e, "save new lot images failed"),

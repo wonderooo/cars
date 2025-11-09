@@ -1,5 +1,4 @@
 pub mod copart {
-    use crate::bucket;
     use crate::io::copart::LotVehicleVector;
     use diesel::prelude::*;
 
@@ -151,52 +150,4 @@ pub mod copart {
     }
 
     pub struct NewLotImages(pub Vec<NewLotImage>);
-
-    impl From<bucket::models::NewLotImages> for NewLotImages {
-        fn from(value: bucket::models::NewLotImages) -> Self {
-            Self(
-                value
-                    .0
-                    .into_iter()
-                    .map(|bucket| {
-                        let (standard_bucket_key, standard_mime_type, standard_source_url) =
-                            match bucket.standard {
-                                Some(s) => (Some(s.bucket_key), Some(s.mime_type), Some(s.url)),
-                                None => (None, None, None),
-                            };
-
-                        let (thumbnail_bucket_key, thumbnail_mime_type, thumbnail_source_url) =
-                            match bucket.thumbnail {
-                                Some(s) => (Some(s.bucket_key), Some(s.mime_type), Some(s.url)),
-                                None => (None, None, None),
-                            };
-
-                        let (high_res_bucket_key, high_res_mime_type, high_res_source_url) =
-                            match bucket.high_res {
-                                Some(s) => (Some(s.bucket_key), Some(s.mime_type), Some(s.url)),
-                                None => (None, None, None),
-                            };
-
-                        NewLotImage {
-                            standard_bucket_key,
-                            standard_mime_type,
-                            standard_source_url,
-
-                            thumbnail_bucket_key,
-                            thumbnail_mime_type,
-                            thumbnail_source_url,
-
-                            high_res_bucket_key,
-                            high_res_mime_type,
-                            high_res_source_url,
-
-                            sequence_number: bucket.sequence_number,
-                            image_type: bucket.image_type,
-                            lot_vehicle_number: bucket.lot_vehicle_number,
-                        }
-                    })
-                    .collect(),
-            )
-        }
-    }
 }

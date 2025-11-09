@@ -36,7 +36,7 @@ async fn main() {
         "consumer_group",
         &[
             "copart_response_lot_search",
-            "copart_response_lot_image_blobs",
+            "copart_response_synced_images",
         ],
     )
     .run_on(

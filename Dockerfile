@@ -40,11 +40,11 @@ HEALTHCHECK --interval=10s --timeout=3s \
   CMD sh -c "cat ./proxy/log.txt | grep -q 'app started'"
 ENTRYPOINT ["./proxy-bin"]
 
-FROM runtime AS requester
-RUN mv requester requester-bin
+FROM runtime AS imgsync
+RUN mv imgsync imgsync-bin
 HEALTHCHECK --interval=10s --timeout=3s \
-  CMD sh -c "cat ./requester/log.txt | grep -q 'app started'"
-ENTRYPOINT ["./requester-bin"]
+  CMD sh -c "cat ./imgsync/log.txt | grep -q 'app started'"
+ENTRYPOINT ["./imgsync-bin"]
 
 FROM runtime AS sched
 RUN mv sched sched-bin

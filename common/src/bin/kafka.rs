@@ -23,14 +23,14 @@ async fn main() {
         .expect("failed to recreate `copart_response_lot_search` topic");
     admin
         .create_absent_topic_with_opts(
-            "copart_response_lot_image_blobs",
+            "copart_response_synced_images",
             &HashMap::from([
                 ("max.message.bytes", "100000000"),
                 ("retention.ms", "1800000"),
             ]),
         )
         .await
-        .expect("failed to recreate `copart_response_lot_image_blobs` topic");
+        .expect("failed to recreate `copart_response_synced_images` topic");
     admin
         .create_absent_topic("copart_response_lot_images")
         .await
