@@ -202,7 +202,8 @@ impl ResponseHandler {
     async fn process_lot_search(&self, event: Arc<EventRequestPaused>) -> Result<(), GeneralError> {
         let maybe_response = self.create_lot_search(event).await;
         self.response_sender
-            .send(CopartResponse::LotSearch(maybe_response))?;
+            .send(CopartResponse::LotSearch(maybe_response))
+            .await?;
         Ok(())
     }
 
@@ -231,7 +232,8 @@ impl ResponseHandler {
     async fn process_lot_images(&self, event: Arc<EventRequestPaused>) -> Result<(), GeneralError> {
         let maybe_response = self.create_lot_images(event).await;
         self.response_sender
-            .send(CopartResponse::LotImages(maybe_response))?;
+            .send(CopartResponse::LotImages(maybe_response))
+            .await?;
         Ok(())
     }
 

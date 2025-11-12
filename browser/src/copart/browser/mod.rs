@@ -9,7 +9,7 @@ use common::io::copart::{CopartCmd, CopartResponse};
 use common::io::error::GeneralError;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
@@ -17,10 +17,10 @@ use tracing::debug;
 pub mod handlers;
 pub mod smf;
 
-pub type CmdSender = UnboundedSender<CopartCmd>;
-pub type CmdReceiver = UnboundedReceiver<CopartCmd>;
-pub type ResponseReceiver = UnboundedReceiver<CopartResponse>;
-pub type ResponseSender = UnboundedSender<CopartResponse>;
+pub type CmdSender = Sender<CopartCmd>;
+pub type CmdReceiver = Receiver<CopartCmd>;
+pub type ResponseReceiver = Receiver<CopartResponse>;
+pub type ResponseSender = Sender<CopartResponse>;
 
 pub struct CopartBrowser;
 
@@ -53,8 +53,8 @@ impl CopartBrowser {
         .await
         .expect("browser failed to launch");
 
-        let (cmd_sender, cmd_receiver) = tokio::sync::mpsc::unbounded_channel();
-        let (resp_sender, resp_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (cmd_sender, cmd_receiver) = tokio::sync::mpsc::channel(32);
+        let (resp_sender, resp_receiver) = tokio::sync::mpsc::channel(32);
         let done = Self::run_and_forget_handlers(
             handler,
             browser,

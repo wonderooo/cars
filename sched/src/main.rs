@@ -1,6 +1,6 @@
 use common::logging::setup_logging;
 use sched::copart::CopartLotSearchTask;
-use sched::{minutes, ScheduledTask, Scheduler};
+use sched::{hours, ScheduledTask, Scheduler};
 use tracing::info;
 
 #[tokio::main]
@@ -11,7 +11,7 @@ async fn main() {
     Scheduler::run_task(
         ScheduledTask::Interval {
             task: Box::new(CopartLotSearchTask::default()),
-            interval: minutes(120),
+            interval: hours(4),
         },
         None,
     );

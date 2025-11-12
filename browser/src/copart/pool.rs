@@ -31,9 +31,8 @@ impl CopartBrowserPool {
         port: u16,
         cancellation_token: CancellationToken,
     ) -> (Self, ExternalSignaling) {
-        let (global_cmd_sender, global_cmd_receiver) = tokio::sync::mpsc::unbounded_channel();
-        let (global_response_sender, global_response_receiver) =
-            tokio::sync::mpsc::unbounded_channel();
+        let (global_cmd_sender, global_cmd_receiver) = tokio::sync::mpsc::channel(32);
+        let (global_response_sender, global_response_receiver) = tokio::sync::mpsc::channel(32);
 
         let pool = Self {
             host,
@@ -101,14 +100,15 @@ impl CopartBrowserPool {
         global_response_sender: ResponseSender,
         mut response_receiver: ResponseReceiver,
     ) -> AbortHandle {
-        let handle_response =
-            |response: CopartResponse,
-             global_response_sender: &ResponseSender|
-             -> Result<(), GeneralError> { Ok(global_response_sender.send(response)?) };
+        let handle_response = async |response: CopartResponse,
+                                     global_response_sender: &ResponseSender|
+               -> Result<(), GeneralError> {
+            Ok(global_response_sender.send(response).await?)
+        };
 
         let join_handle = tokio::spawn(async move {
             while let Some(response) = response_receiver.recv().await {
-                if let Err(e) = handle_response(response, &global_response_sender) {
+                if let Err(e) = handle_response(response, &global_response_sender).await {
                     error!("failed to handle response: {}", e);
                 }
             }
@@ -122,7 +122,7 @@ impl CopartBrowserPool {
             let sender = local_cmd_senders
                 .pop_front()
                 .ok_or(GeneralError::BrowserPoolEmpty)?;
-            sender.send(cmd)?;
+            sender.send(cmd).await?;
             local_cmd_senders.push_back(sender);
 
             Ok::<(), GeneralError>(())
@@ -134,7 +134,7 @@ impl CopartBrowserPool {
                 match cmd {
                     CopartCmd::Auction(_) => {
                         let (cmd_sender, _, _) = self.spawn_browser().await;
-                        if let Err(e) = cmd_sender.send(cmd) {
+                        if let Err(e) = cmd_sender.send(cmd).await {
                             error!("failed to handle global cmd receive: {}", e);
                         }
                     }

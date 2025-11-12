@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use common::io::copart::{CopartCmd, CopartResponse};
 use common::kafka::{KafkaError, ReceiveHandle, SendHandle, SendMsg, ToTopic};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::error;
 
 pub struct CopartPoolTxKafkaAdapter {
-    pub cmd_sender: UnboundedSender<CopartCmd>,
+    pub cmd_sender: Sender<CopartCmd>,
 }
 
 #[async_trait]
@@ -17,6 +17,7 @@ impl ReceiveHandle for CopartPoolTxKafkaAdapter {
             Ok(msg) => self
                 .cmd_sender
                 .send(msg)
+                .await
                 .expect("tokio mpsc channel - cmd receiver is gone"),
             Err(e) => error!("kafka receive failed: `{e}`"),
         };
@@ -24,7 +25,7 @@ impl ReceiveHandle for CopartPoolTxKafkaAdapter {
 }
 
 pub struct CopartPoolRxKafkaAdapter {
-    pub response_receiver: UnboundedReceiver<CopartResponse>,
+    pub response_receiver: Receiver<CopartResponse>,
 }
 
 #[async_trait]
