@@ -125,6 +125,7 @@ pub mod copart {
         /// to fetch image urls from the provider
         LotImages(LotNumber),
         Auction(AuctionId),
+        LoginRefresh,
     }
 
     #[derive(Debug, Serialize, Deserialize)]
@@ -144,6 +145,7 @@ pub mod copart {
                 Self::LotSearch { .. } => "copart_cmd_lot_search".to_string(),
                 Self::LotImages(..) => "copart_cmd_lot_images".to_string(),
                 Self::Auction(_) => "copart_cmd_auction".to_string(),
+                Self::LoginRefresh => "copart_cmd_login_refresh".to_string(),
             }
         }
     }

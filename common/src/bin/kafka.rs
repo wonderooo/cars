@@ -39,4 +39,8 @@ async fn main() {
         .create_absent_topic("copart_cmd_auction")
         .await
         .expect("failed to recreate `copart_cmd_auction` topic");
+    admin
+        .create_absent_topic("copart_cmd_login_refresh")
+        .await
+        .expect("failed to recreate `copart_cmd_login_refresh` topic");
 }

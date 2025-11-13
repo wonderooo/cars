@@ -41,6 +41,7 @@ impl CmdsHandler {
                         .lot_search(page_number, date_start, date_end, year_start, year_end)
                         .await
                 }
+                CopartCmd::LoginRefresh => self.navigator.login().await,
                 CopartCmd::LotImages(ln) => self.navigator.lot_images(ln).await,
                 CopartCmd::Auction(aid) => self.navigator.auction(aid).await,
             }

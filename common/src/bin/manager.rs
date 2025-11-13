@@ -63,6 +63,7 @@ mod kafka {
         "copart_response_lot_search",
         "copart_response_lot_images",
         "copart_cmd_auction",
+        "copart_cmd_login_refresh",
     ];
 
     const TOPICS_WITH_OPTS: &[(&str, &[(&str, &str)])] = &[(

@@ -26,6 +26,7 @@ async fn main() {
             "copart_cmd_lot_search",
             "copart_cmd_lot_images",
             "copart_cmd_auction",
+            "copart_cmd_login_refresh",
         ],
     )
     .run_on(

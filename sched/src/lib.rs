@@ -23,6 +23,10 @@ pub enum ScheduledTask {
         task: Box<dyn Task>,
         interval: tokio::time::Duration,
     },
+    IntervalDeferred {
+        task: Box<dyn Task>,
+        interval: tokio::time::Duration,
+    },
     Timed {
         task: Box<dyn Task>,
         when: chrono::NaiveDateTime,
@@ -34,6 +38,9 @@ impl Scheduler {
         match task {
             ScheduledTask::Interval { task, interval } => {
                 Self::spawn_interval_task(task, interval, opts)
+            }
+            ScheduledTask::IntervalDeferred { task, interval } => {
+                Self::spawn_interval_deferred_task(task, interval, opts)
             }
             ScheduledTask::Timed { task, when } => Self::spawn_timed_task(task, when, opts),
         }
@@ -48,6 +55,30 @@ impl Scheduler {
             {
                 async move {
                     let mut ticker = tokio::time::interval(interval);
+                    loop {
+                        ticker.tick().await;
+                        debug!(
+                            "running task with descriptor: `{:?}` and duration: `{:?}`",
+                            task.descriptor(),
+                            interval,
+                        );
+                        task.run(opts.as_ref()).await;
+                    }
+                }
+            }
+        });
+    }
+
+    fn spawn_interval_deferred_task(
+        task: Box<dyn Task>,
+        interval: tokio::time::Duration,
+        opts: Option<HashMap<String, String>>,
+    ) {
+        tokio::spawn({
+            {
+                async move {
+                    let mut ticker = tokio::time::interval(interval);
+                    ticker.tick().await;
                     loop {
                         ticker.tick().await;
                         debug!(

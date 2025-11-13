@@ -138,6 +138,13 @@ impl CopartBrowserPool {
                             error!("failed to handle global cmd receive: {}", e);
                         }
                     }
+                    CopartCmd::LoginRefresh => {
+                        for sender in &local_cmd_senders {
+                            if let Err(e) = sender.send(CopartCmd::LoginRefresh).await {
+                                error!("failed to send cmd to local sender: {e}");
+                            }
+                        }
+                    }
                     CopartCmd::LotSearch { .. } | CopartCmd::LotImages(_) => {
                         if let Err(e) = handle_cmd(cmd, &mut local_cmd_senders).await {
                             error!("failed to handle global cmd receive: {}", e);
